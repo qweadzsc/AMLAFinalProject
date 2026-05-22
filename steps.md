@@ -272,6 +272,36 @@ conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_dar.py  
 
 - 对当前弱 baseline checkpoint 而言，DAR 是一个非常强的 inference-time patch。
 - 它不仅改善 OOD 和 TSP100，也显著改善 TSP50 uniform。
+
+长训练 baseline 复查（80 epoch checkpoint）：
+
+为排除“DAR 只是修补弱 baseline”的可能，本次额外使用上一次长训练得到的 checkpoint：
+
+- `Project/experiments/lc_leader/checkpoints/long_baseline_e80_b50_seed20260522_gpu5/best_model.pth`
+
+本次实际执行命令：
+
+```bash
+conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_dar.py   --checkpoint Project/experiments/lc_leader/checkpoints/long_baseline_e80_b50_seed20260522_gpu5/best_model.pth   --device cuda:0   --dar-enabled 0   --dar-k 10   --dar-alpha 1.0   --results-dir Project/experiments/lc_dar_elg/results/step2_long_baseline_dar_off_k10_a1
+
+conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_dar.py   --checkpoint Project/experiments/lc_leader/checkpoints/long_baseline_e80_b50_seed20260522_gpu5/best_model.pth   --device cuda:0   --dar-enabled 1   --dar-k 10   --dar-alpha 1.0   --results-dir Project/experiments/lc_dar_elg/results/step2_long_baseline_dar_on_k10_a1
+```
+
+长训练 baseline 上的实验结果（DAR off vs DAR on, `k=10`, `alpha=1.0`）：
+
+| Dataset | DAR off cost | DAR on cost | Cost delta | DAR off gap | DAR on gap | Gap delta |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| tsp50_uniform | 5.9426 | 5.9025 | -0.0401 | 4.80% | 4.09% | -0.71% |
+| tsp50_ood | 5.2612 | 5.1400 | -0.1212 | 8.95% | 6.34% | -2.61% |
+| tsp100_uniform | 8.6457 | 8.4207 | -0.2250 | 10.55% | 7.69% | -2.86% |
+
+复查结论：
+
+- DAR 的收益并不只来自“基线太弱”。
+- 在长训练 baseline 上，DAR 依然稳定改善三验证集，尤其对 `tsp50_ood` 和 `tsp100_uniform` 仍有较明确收益。
+- 但长训练 baseline 上的改善幅度已经明显小于弱 baseline，这说明先前的超大提升中确实有一部分来自“短训 baseline 本身过差”。
+- 因此后续 Step 3 的超参扫描，应优先以长训练 baseline 为主对象，避免被弱 baseline 的放大效应误导。
+
 - 下一步需要做 Step 3 超参扫描，确认这种提升是否对 `K` 和 `alpha` 稳定，而不是只在单点参数上偶然成立。
 
 ## Step 3：做 DAR 小规模超参扫描
