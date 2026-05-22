@@ -68,7 +68,36 @@ python evaluate_lc.py
 
 如果这一步失败，后续所有实验都没有可靠基础。
 
-## Step 2：建立三类验证集评估入口
+## Step 2：建立三类验证集评估入口（已完成）
+
+当前状态：
+
+- 未修改 `Project/baselines/` 和 `Project/data/` 中的原始文件。
+- 已新增独立评估目录：`Project/experiments/lc_eval/`。
+- `evaluate_lc_dataset.py` 支持通过命令行传入 `--test-data`、`--node-cnt`、`--pomo-size`、`--checkpoint`、`--device`。
+- `eval_all_lc.py` 会依次评估三类验证集，并把 JSON 结果写入 `Project/experiments/lc_eval/results/`。
+
+本次 Step 2 验证结果：
+
+```text
+tsp50_uniform_val_128:
+  Average cost: 12.8206
+  Average optimal: 5.6709
+  Average gap: 126.30%
+  Total time: 2.94s
+
+tsp50_ood_val_16:
+  Average cost: 9.9655
+  Average optimal: 4.8343
+  Average gap: 105.72%
+  Total time: 0.55s
+
+tsp100_uniform_val_16:
+  Average cost: 21.9777
+  Average optimal: 7.8196
+  Average gap: 181.34%
+  Total time: 0.92s
+```
 
 目标：把作业要求的三类验证集都纳入固定评测流程。
 
