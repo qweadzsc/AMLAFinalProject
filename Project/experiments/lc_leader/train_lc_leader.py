@@ -6,6 +6,7 @@ baseline model/environment interfaces.
 
 import argparse
 import json
+import os
 import random
 import sys
 from datetime import datetime
@@ -45,6 +46,8 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--seed", type=int, default=1234)
+    parser.add_argument("--val-interval", type=int, default=1)
+    parser.add_argument("--disable-progress", action="store_true")
     parser.add_argument("--node-cnt", type=int, default=50)
     parser.add_argument("--pomo-size", type=int, default=50)
     parser.add_argument("--use-leader-reward", type=int, choices=[0, 1], default=1)
@@ -186,6 +189,20 @@ def average_metrics(metrics):
     return {key: sum(item[key] for item in metrics) / len(metrics) for key in keys}
 
 
+def cuda_info(device: str) -> dict:
+    info = {
+        "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES", "<unset>"),
+        "torch_cuda_available": torch.cuda.is_available(),
+        "torch_cuda_device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
+        "requested_device": device,
+    }
+    if torch.cuda.is_available() and "cuda" in device:
+        idx = int(device.split(":")[1]) if ":" in device else 0
+        info["torch_current_device"] = torch.cuda.current_device()
+        info["torch_device_name"] = torch.cuda.get_device_name(idx)
+    return info
+
+
 def main():
     args = parse_args()
     set_seed(args.seed)
@@ -210,14 +227,22 @@ def main():
     print(f"Batches per epoch:        {args.batches_per_epoch}")
     print(f"Batch size:               {args.batch_size}")
     print(f"Seed:                     {args.seed}")
+    print(f"Validation interval:      {args.val_interval}")
     print(f"Use Leader Reward:        {bool(args.use_leader_reward)}")
     print(f"LR multiplier:            {args.leader_reward_multiplier}")
     print(f"Normalize LR advantage:   {bool(args.normalize_leader_advantage)}")
     print(f"Device:                   {args.device}")
+    cuda_runtime_info = cuda_info(args.device)
+    print(f"CUDA_VISIBLE_DEVICES:     {cuda_runtime_info['cuda_visible_devices']}")
+    print(f"Torch CUDA devices:       {cuda_runtime_info['torch_cuda_device_count']}")
+    if cuda_runtime_info.get("torch_device_name"):
+        print(f"Torch device name:        {cuda_runtime_info['torch_device_name']}")
     print("=" * 72)
 
     config_path = run_dir / "config.json"
-    config_path.write_text(json.dumps(vars(args), indent=2, default=str) + "\n")
+    config = vars(args).copy()
+    config["cuda_info"] = cuda_runtime_info
+    config_path.write_text(json.dumps(config, indent=2, default=str) + "\n")
 
     best_val_cost = float("inf")
     history = []
@@ -225,7 +250,13 @@ def main():
     for epoch in range(1, args.epochs + 1):
         model.train()
         epoch_metrics = []
-        pbar = tqdm(range(args.batches_per_epoch), desc=f"Epoch {epoch:3d}/{args.epochs}", unit="batch", leave=False)
+        pbar = tqdm(
+            range(args.batches_per_epoch),
+            desc=f"Epoch {epoch:3d}/{args.epochs}",
+            unit="batch",
+            leave=False,
+            disable=args.disable_progress,
+        )
         for _ in pbar:
             batch_metrics = train_one_batch(model, env, optimizer, args)
             epoch_metrics.append(batch_metrics)
@@ -239,22 +270,24 @@ def main():
             )
 
         metrics = average_metrics(epoch_metrics)
-        val_cost = validate(model, env, val_solver, args.device)
+        should_validate = epoch % args.val_interval == 0 or epoch == args.epochs
+        val_cost = validate(model, env, val_solver, args.device) if should_validate else None
         metrics.update({"epoch": epoch, "val_cost": val_cost})
         history.append(metrics)
 
-        print(
+        message = (
             f"Epoch {epoch:3d}/{args.epochs} - "
             f"Train Length: {metrics['avg_length']:.4f}, "
             f"Best Length: {metrics['best_length']:.4f}, "
             f"POMO Loss: {metrics['pomo_loss']:.4f}, "
             f"Leader Delta Loss: {metrics['leader_delta_loss']:.4f}, "
-            f"Loss: {metrics['loss']:.4f}, "
-            f"Val Cost: {val_cost:.4f}",
-            end="",
+            f"Loss: {metrics['loss']:.4f}"
         )
+        if val_cost is not None:
+            message += f", Val Cost: {val_cost:.4f}"
+        print(message, end="")
 
-        if val_cost < best_val_cost:
+        if val_cost is not None and val_cost < best_val_cost:
             best_val_cost = val_cost
             torch.save(model.state_dict(), run_dir / "best_model.pth")
             torch.save(model.state_dict(), run_dir / f"model_epoch_{epoch}_cost_{val_cost:.4f}.pth")

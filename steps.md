@@ -230,6 +230,24 @@ python train_lc.py
 
 结论：在这组短训练预算下，Leader Reward 对 TSP-50 uniform 和 TSP-100 有小幅提升，对 OOD 基本持平略差。结果说明该目标函数有正向信号，但训练长度较短，后续应做更长训练或多 seed 验证稳定性。
 
+长训练复查（GPU 5 单卡）：
+
+- 运行方式：`CUDA_VISIBLE_DEVICES=5`，脚本内设备为 `cuda:0`。
+- 脚本打印确认：`CUDA_VISIBLE_DEVICES: 5`、`Torch CUDA devices: 1`、`Torch device name: NVIDIA A800-SXM4-80GB`。
+- `nvidia-smi` 监控确认：物理 GPU 5 有约 1.5GB 显存占用和约 55%-60% utilization，其它 GPU 空闲。
+- 长训预算：baseline 与 Leader Reward 都使用 `80 epochs`、`50 batches/epoch`、`batch size 64`、`seed 20260522`，每 5 epoch 验证一次。
+- 结果保存：`Project/experiments/lc_leader/results/long_step4_comparison.md`。
+
+长训练三验证集结果：
+
+| Dataset | Baseline cost | Leader cost | Cost delta | Baseline gap | Leader gap | Gap delta |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| tsp50_uniform | 5.9426 | 5.9297 | -0.0129 | 4.80% | 4.58% | -0.22% |
+| tsp50_ood | 5.2612 | 5.1812 | -0.0800 | 8.95% | 7.23% | -1.72% |
+| tsp100_uniform | 8.6457 | 8.5995 | -0.0462 | 10.55% | 9.97% | -0.58% |
+
+长训结论：训练长度确实是短训 gap 偏大的主要原因，80 epoch 后 gap 从约 17% 降到约 4%-5%。Leader Reward 的提升仍然不大，但在这次同 seed 长训中三类验证集都优于 baseline；验证曲线在 70-80 epoch 已接近平台期，继续训练可能还有小幅收益，但边际收益明显变小。
+
 目标：验证 Leader Reward 是否真的带来改进，或者至少得到可分析的实验现象。
 
 需要完成：
