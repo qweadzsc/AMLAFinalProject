@@ -1,511 +1,500 @@
-# LC/POMO 路线可执行步骤
+# DAR + ELG 路线可执行步骤
 
-## 总体路线
+## 总体判断
 
-本项目建议选择 `Project/baselines/lc_baseline/` 作为主线，在 POMO baseline 上做轻量、可验证、适合写报告的改进：
+这次建议关闭 Leader Reward 路线，改做一条更稳的 attention 改造路线：
 
-1. 先建立 baseline 结果和可复现实验脚本。
-2. 复现 Leader Reward 思路，改进 POMO 的训练目标。
-3. 加入 Sym-NCO 风格的几何对称增强，提升泛化。
-4. 针对跨规模测试，加入 TSP-50/TSP-100 的轻量兼容与评估。
-5. 做消融实验并整理 `README.md`、`Report.pdf`。
+1. 先复用当前 LC/POMO baseline 与现有三验证集评测流程。
+2. 优先实现 **DAR (Distance-Aware Attention Reshaping)**，因为它是**推理期改动**、**不增加参数**、**不要求重训即可先验证**。
+3. 再实现 **ELG (Ensemble with Transferrable Local Policy)** 的 TSP 版本，因为它是**训练期局部策略 + 全局策略融合**，工程量更大，但和当前 POMO/LC 结构兼容。
+4. 最后做 **ELG + DAR** 复合，作为我们自己的工作点。
 
-核心原则：每一步都要有可以用代码验证的 milestone，避免只停留在论文描述。
+这条路线的优点是：
 
-## Step 1：跑通原始 LC baseline（已完成，NV 环境验证通过）
+- 比 Leader Reward 更贴近 attention 本体，和当前模型结构更匹配。
+- DAR 可以先给出一个低风险、可快速验证的结果。
+- ELG 的局部策略可以作为后续增强项，不需要一开始就重构整个 baseline。
+- 两篇论文都有官方开源代码，可以对照实现细节。
 
-当前状态：
+## 两篇论文总结
 
-- 已在 Linux/NVIDIA A800 环境中新建 `amla_tsp` conda 环境，Python 版本为 3.8。
-- 已安装 `Project/requirements.txt` 中依赖，包括 `torch==2.1.0`、`ml4co-kit==0.3.3`、`torch-scatter`、`torch-sparse`、`torch-spline-conv`、`torch-cluster`。
-- `ml4co-kit` 首次导入时已完成本地 C/C++ 扩展编译，`torch.cuda.is_available()` 返回 `True`。
-- 已用短训练配置跑通 `train_lc.py`：`AMLA_EPOCHS=1`、`AMLA_BATCHES_PER_EPOCH=2`、`AMLA_BATCH_SIZE=4`、`AMLA_DEVICE=cuda:0`。
-- 训练已生成 `Project/baselines/lc_baseline/checkpoints/best_model.pth`，并生成时间戳目录 `checkpoints/20260522_143953/`。
-- 已跑通 `evaluate_lc.py`，评测输出包含 `Average cost`、`Average gap`、`Total time`。
+### 1. DAR：Distance-Aware Attention Reshaping for Enhancing Generalization of Neural Solvers
 
-本次 Step 1 验证结果：
+论文核心思想：
 
-```text
-Train Length: 24.3000
-Train Loss: -0.9764
-Val Cost: 12.8206
-Average cost: 12.8206
-Average optimal: 5.6709
-Average gap: 126.30%
-Total time: 2.93s
-Avg time/instance: 0.0229s
-```
+- 作者观察到 attention-based neural solver 在从小规模/单一分布泛化到大规模/异分布实例时，会出现 **attention score dispersion**，即高分候选节点变多，导致 next-node 选择不够集中。
+- DAR 的做法是在**推理阶段**直接给原始 attention/logit 加一个基于几何距离的 bias，不增加模型参数。
+- 直觉上，当前节点附近的候选点更可能是合理下一步，因此在原模型得分之外，额外加入“距离越近越优先”的启发式。
 
-目标：确认当前项目环境、LC 模型、训练脚本和评测脚本都能正常运行。
-
-需要完成：
-
-- 进入 `Project/baselines/lc_baseline/`
-- 跑一次短训练，确认 `train_lc.py` 可以完成至少 1 个 epoch
-- 跑一次 `evaluate_lc.py`，确认可以加载 `checkpoints/best_model.pth` 并输出 cost/gap/time
-
-建议先把训练配置临时改小：
-
-```python
-EPOCHS = 1
-BATCHES_PER_EPOCH = 2
-BATCH_SIZE = 4
-```
-
-Milestone：
-
-```bash
-cd Project/baselines/lc_baseline
-python train_lc.py
-python evaluate_lc.py
-```
-
-验证标准：
-
-- 训练脚本能生成 checkpoint 目录
-- 至少保存出一个 `best_model.pth`
-- 评测脚本输出 `Average cost`、`Average gap`、`Total time`
-
-如果这一步失败，后续所有实验都没有可靠基础。
-
-## Step 2：建立三类验证集评估入口（已完成）
-
-当前状态：
-
-- 未修改 `Project/baselines/` 和 `Project/data/` 中的原始文件。
-- 已新增独立评估目录：`Project/experiments/lc_eval/`。
-- `evaluate_lc_dataset.py` 支持通过命令行传入 `--test-data`、`--node-cnt`、`--pomo-size`、`--checkpoint`、`--device`。
-- `eval_all_lc.py` 会依次评估三类验证集，并把 JSON 结果写入 `Project/experiments/lc_eval/results/`。
-
-本次 Step 2 验证结果：
+可执行的简化公式：
 
 ```text
-tsp50_uniform_val_128:
-  Average cost: 12.8206
-  Average optimal: 5.6709
-  Average gap: 126.30%
-  Total time: 2.94s
+original_score = decoder logits before softmax
+distance_bias(i, j) =
+  -log(d_ij), if j in top-K nearest neighbors of current node i
+  -d_ij,     otherwise
 
-tsp50_ood_val_16:
-  Average cost: 9.9655
-  Average optimal: 4.8343
-  Average gap: 105.72%
-  Total time: 0.55s
-
-tsp100_uniform_val_16:
-  Average cost: 21.9777
-  Average optimal: 7.8196
-  Average gap: 181.34%
-  Total time: 0.92s
+reshaped_score = original_score + alpha * distance_bias
+prob = softmax(mask(reshaped_score))
 ```
 
-目标：把作业要求的三类验证集都纳入固定评测流程。
+对我们当前仓库的意义：
 
-需要完成：
+- 非常适合当前 `LCModel`，因为它本身就有 decoder logits。
+- 可以先只在 `Project/experiments/` 新建独立推理脚本，不改 baseline 原文件。
+- 可以直接复用我们已有的三验证集：
+  - `tsp50_uniform_val_128`
+  - `tsp50_ood_val_16`
+  - `tsp100_uniform_val_16`
 
-- 让 `evaluate_lc.py` 可以方便切换以下数据：
-  - `../../data/val/tsp50_uniform_val_128.txt`
-  - `../../data/val/tsp50_ood_val_16.txt`
-  - `../../data/val/tsp100_uniform_val_16.txt`
-- 对 TSP-100 评测时，确保 `NODE_CNT = 100`、`POMO_SIZE = 100`
-- 记录每个验证集的 cost、gap、time
+预期收益：
 
-推荐做法：
+- 重点看 **OOD** 和 **跨规模 TSP100** 是否改善。
+- 训练成本很低，因为第一阶段甚至可以只做 inference-time patch。
 
-- 在 `evaluate_lc.py` 中增加命令行参数，如 `--test-data`、`--node-cnt`、`--pomo-size`
-- 或者新增一个小脚本 `run_eval_all.sh`/`eval_all.py` 批量调用三次评测
+### 2. ELG：Towards Generalizable Neural Solvers for Vehicle Routing Problems via Ensemble with Transferrable Local Policy
 
-Milestone：
+论文核心思想：
 
-```bash
-cd Project/baselines/lc_baseline
-python evaluate_lc.py --test-data ../../data/val/tsp50_uniform_val_128.txt --node-cnt 50 --pomo-size 50
-python evaluate_lc.py --test-data ../../data/val/tsp50_ood_val_16.txt --node-cnt 50 --pomo-size 50
-python evaluate_lc.py --test-data ../../data/val/tsp100_uniform_val_16.txt --node-cnt 100 --pomo-size 100
-```
+- 全局 policy（如 POMO）擅长从完整图中学全局结构，但跨分布、跨规模时泛化弱。
+- 作者引入一个 **local policy**，只在当前节点附近的 K 个邻居上做决策，学习更可迁移的局部拓扑模式。
+- 推理时把全局 policy 和 local policy 的 score 相加，形成 ensemble。
 
-验证标准：
-
-- 三个命令都能独立跑完
-- 每个命令都输出 `Average cost`、`Average gap`、`Total time`
-- TSP-100 不因为 shape、mask、POMO size 报错
-
-这一步的结果就是报告中的 baseline 表格。
-
-## Step 3：实现 Leader Reward 训练目标（已完成）
-
-当前状态：
-
-- 未修改 `Project/baselines/` 和 `Project/data/` 中的原始文件。
-- 已新增独立训练入口：`Project/experiments/lc_leader/train_lc_leader.py`。
-- 依据 Leader Reward 论文，将同一问题 POMO rollout 中 reward 最大的 leader 轨迹 advantage 乘以 `--leader-reward-multiplier`，并保留 `--normalize-leader-advantage` 选项。
-- `--use-leader-reward 0` 时直接使用原始 POMO loss，训练路径退化为 baseline。
-- 脚本会打印 `POMO Loss`、`Leader Delta Loss`、`Loss`，并把 checkpoint 保存到 `Project/experiments/lc_leader/checkpoints/<run-name>/`，不覆盖 baseline checkpoint。
-
-本次 Step 3 验证结果：
+论文中的关键结构：
 
 ```text
-Leader Reward smoke run:
-  command: conda run -n amla_tsp python Project/experiments/lc_leader/train_lc_leader.py --run-name leader_smoke --epochs 1 --batches-per-epoch 2 --batch-size 4 --use-leader-reward 1 --leader-reward-multiplier 2.0 --device cuda:0
-  Train Length: 20.9161
-  Best Length: 15.7775
-  POMO Loss: -17.5356
-  Leader Delta Loss: 14.0245
-  Loss: -3.5111
-  Val Cost: 9.2306
-
-Baseline switch smoke run:
-  command: conda run -n amla_tsp python Project/experiments/lc_leader/train_lc_leader.py --run-name baseline_switch_smoke --epochs 1 --batches-per-epoch 1 --batch-size 4 --use-leader-reward 0 --device cuda:0
-  POMO Loss: -14.6136
-  Leader Delta Loss: 0.0000
-  Loss: -14.6136
-  Val Cost: 11.0196
+u_global_tilde = u_global + normalized distance penalty
+u_ens = u_global_tilde + u_local
+pi = softmax(mask(C * tanh(u_ens)))
 ```
 
-目标：复现 Leader Reward 的核心思想，让训练目标更贴近 POMO 推理阶段“取最优 rollout”的行为。
+local policy 的关键点：
 
-当前 baseline 在 `train_lc.py` 中使用：
+- 只看当前节点附近 K 个最近邻。
+- 局部特征强调相对几何结构，而不是整张图的全局表示。
+- 论文里用位置编码保留邻居按距离排序后的顺序信息。
 
-```python
-advantage = reward - reward.mean(dim=1, keepdim=True)
-loss = -(advantage * log_prob).mean()
-```
+对我们当前仓库的意义：
 
-需要完成：
+- 当前 LC baseline 是 POMO 风格 rollout，天然适合加一个局部辅助策略。
+- 但完整复现 ELG 比 DAR 重得多，因为它涉及：
+  - 新的局部输入构造
+  - 局部策略网络
+  - 全局/局部联合训练
+  - 可能需要两阶段训练
 
-- 在 `train_one_batch` 中保留原始 POMO loss
-- 额外计算每个 batch 中 reward 最大的 leader rollout
-- 给 leader rollout 增加额外强化项
-- 增加可配置超参数，例如：
-  - `USE_LEADER_REWARD = True`
-  - `LEADER_REWARD_WEIGHT = 1.0`
+因此这次建议的实现方式不是“照搬 CVRP/TSP 官方完整仓库”，而是做一个 **TSP-only, LC-compatible ELG-lite**：
 
-一种可执行的简单版本：
+- 只支持当前课程项目用到的 TSP。
+- 不碰 `Project/baselines/` 和 `Project/data/`。
+- 在 `Project/experiments/` 里新建完整训练/评测入口。
 
-```python
-advantage = reward - reward.mean(dim=1, keepdim=True)
-pomo_loss = -(advantage * log_prob).mean()
+### 3. 适合作为我们的复合工作点
 
-leader_idx = reward.argmax(dim=1)
-leader_log_prob = log_prob[torch.arange(batch_size), leader_idx]
-leader_advantage = reward.max(dim=1).values - reward.mean(dim=1)
-leader_loss = -(leader_advantage.detach() * leader_log_prob).mean()
+最自然的组合方式是：
 
-loss = pomo_loss + LEADER_REWARD_WEIGHT * leader_loss
-```
+1. **训练期**：用 ELG 的局部策略增强全局 policy，提升 learned policy 的可迁移性。
+2. **推理期**：再套一层 DAR，对 decoder logits 做距离感知 reshape。
 
-Milestone：
+这样组合的好处是：
 
-```bash
-cd Project/baselines/lc_baseline
-python train_lc.py
-```
+- ELG 负责“学到更稳的局部-全局协同”。
+- DAR 负责“在推理时抑制 attention dispersion”。
+- 两者一个偏训练、一个偏推理，接口上不冲突。
 
-验证标准：
+## 官方开源仓库
 
-- 训练不会出现 NaN
-- 日志中能同时打印 `pomo_loss`、`leader_loss`、`loss`
-- 关闭 `USE_LEADER_REWARD` 时，训练行为退化为原始 baseline
-- 开启 `USE_LEADER_REWARD` 时，至少可以完成 1 个 epoch 并保存模型
+- DAR 官方代码：<https://github.com/ftwangyang/DAR>
+- ELG 官方代码：<https://github.com/gaocrr/ELG>
 
-报告中可以把这一项作为主要论文复现点。
+对应论文页面：
 
-## Step 4：做 Leader Reward 消融实验（已完成）
+- DAR：<https://arxiv.org/abs/2401.06979>
+- ELG：<https://arxiv.org/abs/2308.14104>
+- ELG IJCAI 2024 论文 PDF：<https://www.ijcai.org/proceedings/2024/764>
 
-当前状态：
+## 上一次尝试里可直接复用的内容
 
-- 未修改 `Project/baselines/` 和 `Project/data/` 中的原始文件。
-- 使用 `Project/experiments/lc_leader/train_lc_leader.py` 分别训练 baseline 与 Leader Reward 版本。
-- 两组训练使用相同预算和 seed：`5 epochs`、`20 batches/epoch`、`batch size 64`、`seed 20260522`。
-- 训练 checkpoint 保存在 `Project/experiments/lc_leader/checkpoints/`，该目录已被 `.gitignore` 忽略。
-- 三类验证集评估结果保存在 `Project/experiments/lc_leader/results/`。
+以下内容已经打通，新的 DAR/ELG 路线不需要重做：
 
-本次 Step 4 消融结果：
+- `amla_tsp` conda 环境已经可用，PyTorch + ml4co-kit + CUDA 已验证通过。
+- 单卡 GPU 训练流程已经验证，`CUDA_VISIBLE_DEVICES=5` + `cuda:0` 可正常跑。
+- 三验证集统一评测脚本已经有：
+  - `Project/experiments/lc_eval/evaluate_lc_dataset.py`
+  - `Project/experiments/lc_eval/eval_all_lc.py`
+- 独立训练脚手架已经有，可直接改造成 ELG 训练器：
+  - `Project/experiments/lc_leader/train_lc_leader.py`
+- 当前 baseline 与长训练结果已经有，可继续作为比较对象：
+  - `Project/baselines/lc_baseline/checkpoints/best_model.pth`
+  - `Project/experiments/lc_leader/results/long_baseline_e80_b50_seed20260522_gpu5/`
+- “不改 baseline/data，只在 experiments 新建目录工作”的工程约束已经实践过，后续继续沿用。
 
-| Dataset | Baseline cost | Leader cost | Cost delta | Baseline gap | Leader gap | Gap delta |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| tsp50_uniform | 6.6770 | 6.6380 | -0.0390 | 17.75% | 17.08% | -0.67% |
-| tsp50_ood | 5.7407 | 5.7430 | +0.0023 | 18.84% | 18.91% | +0.07% |
-| tsp100_uniform | 10.5370 | 10.3806 | -0.1564 | 34.77% | 32.75% | -2.01% |
+建议复用方式：
 
-结论：在这组短训练预算下，Leader Reward 对 TSP-50 uniform 和 TSP-100 有小幅提升，对 OOD 基本持平略差。结果说明该目标函数有正向信号，但训练长度较短，后续应做更长训练或多 seed 验证稳定性。
+- 复用 `train_lc_leader.py` 的 CLI、seed、val interval、checkpoint、GPU 信息打印逻辑，改造成 `train_lc_elg.py`。
+- 复用 `evaluate_lc_dataset.py` 的 dataset loading 与 JSON 输出逻辑，改造成 `evaluate_lc_dar.py` / `eval_all_lc_dar.py`。
+- 复用之前的结果目录结构，统一把新实验放到 `Project/experiments/lc_dar_elg/` 下。
 
-长训练复查（GPU 5 单卡）：
+## 新路线的目录建议
 
-- 运行方式：`CUDA_VISIBLE_DEVICES=5`，脚本内设备为 `cuda:0`。
-- 脚本打印确认：`CUDA_VISIBLE_DEVICES: 5`、`Torch CUDA devices: 1`、`Torch device name: NVIDIA A800-SXM4-80GB`。
-- `nvidia-smi` 监控确认：物理 GPU 5 有约 1.5GB 显存占用和约 55%-60% utilization，其它 GPU 空闲。
-- 长训预算：baseline 与 Leader Reward 都使用 `80 epochs`、`50 batches/epoch`、`batch size 64`、`seed 20260522`，每 5 epoch 验证一次。
-- 结果保存：`Project/experiments/lc_leader/results/long_step4_comparison.md`。
-
-长训练三验证集结果：
-
-| Dataset | Baseline cost | Leader cost | Cost delta | Baseline gap | Leader gap | Gap delta |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| tsp50_uniform | 5.9426 | 5.9297 | -0.0129 | 4.80% | 4.58% | -0.22% |
-| tsp50_ood | 5.2612 | 5.1812 | -0.0800 | 8.95% | 7.23% | -1.72% |
-| tsp100_uniform | 8.6457 | 8.5995 | -0.0462 | 10.55% | 9.97% | -0.58% |
-
-长训结论：训练长度确实是短训 gap 偏大的主要原因，80 epoch 后 gap 从约 17% 降到约 4%-5%。Leader Reward 的提升仍然不大，但在这次同 seed 长训中三类验证集都优于 baseline；验证曲线在 70-80 epoch 已接近平台期，继续训练可能还有小幅收益，但边际收益明显变小。
-
-目标：验证 Leader Reward 是否真的带来改进，或者至少得到可分析的实验现象。
-
-需要完成：
-
-- 训练 baseline：`USE_LEADER_REWARD = False`
-- 训练 leader 版本：`USE_LEADER_REWARD = True`
-- 其他超参数尽量保持一致
-- 每个版本都在三个验证集上评测
-
-建议先做小规模快速实验：
-
-```python
-EPOCHS = 5
-BATCHES_PER_EPOCH = 20
-BATCH_SIZE = 64
-```
-
-如果时间和算力允许，再扩大到更长训练。
-
-Milestone：
-
-```bash
-cd Project/baselines/lc_baseline
-python train_lc.py --use-leader-reward 0 --run-name baseline_short
-python train_lc.py --use-leader-reward 1 --leader-reward-weight 1.0 --run-name leader_short
-python evaluate_lc.py --checkpoint checkpoints/baseline_short/best_model.pth --test-data ../../data/val/tsp50_uniform_val_128.txt --node-cnt 50 --pomo-size 50
-python evaluate_lc.py --checkpoint checkpoints/leader_short/best_model.pth --test-data ../../data/val/tsp50_uniform_val_128.txt --node-cnt 50 --pomo-size 50
-```
-
-验证标准：
-
-- 两个 run 都能生成各自的 `best_model.pth`
-- 两个模型都能在同一个验证集上评测
-- 能得到一张包含 cost/gap/time 的对比表
-
-即使 leader 版本没有明显超过 baseline，也可以在报告中分析训练长度、超参数和方差问题。
-
-## Step 5：加入几何对称增强
-
-目标：利用 TSP 的几何对称性，提高 OOD 和跨规模泛化。
-
-可实现的增强包括：
-
-- 随机交换 x/y 坐标
-- 随机做 `x -> 1 - x`
-- 随机做 `y -> 1 - y`
-- 可选：90/180/270 度旋转，等价于坐标翻转与交换组合
-
-建议新增函数：
-
-```python
-def augment_coordinates(coords):
-    ...
-    return coords
-```
-
-落点可以是：
-
-- `TSPEnv.load_problems` 生成坐标后立即增强
-- 或 `train_one_batch` 中 `env.load_problems(batch_size)` 后增强 `env.coordinates` 并重算 `env.problems`
-
-Milestone：
-
-```bash
-cd Project/baselines/lc_baseline
-python train_lc.py --use-aug 1 --epochs 1 --batches-per-epoch 2
-```
-
-验证标准：
-
-- 增强后的 `coordinates` 仍在 `[0, 1]`
-- `problems = torch.cdist(coordinates, coordinates, p=2)` 被正确重算
-- 训练能正常反向传播，不出现 shape 错误
-- 同一批数据增强前后 tour 长度量级合理
-
-这一步可以作为第二个改进点，报告中对应 Sym-NCO 风格的对称性利用。
-
-## Step 6：做增强策略消融
-
-目标：确认几何增强是否改善 OOD 或 TSP-100 表现。
-
-需要完成四组对比：
-
-| 实验 | Leader Reward | 几何增强 |
-| --- | --- | --- |
-| A | 关闭 | 关闭 |
-| B | 开启 | 关闭 |
-| C | 关闭 | 开启 |
-| D | 开启 | 开启 |
-
-Milestone：
-
-```bash
-cd Project/baselines/lc_baseline
-python train_lc.py --use-leader-reward 0 --use-aug 0 --run-name ablation_A
-python train_lc.py --use-leader-reward 1 --use-aug 0 --run-name ablation_B
-python train_lc.py --use-leader-reward 0 --use-aug 1 --run-name ablation_C
-python train_lc.py --use-leader-reward 1 --use-aug 1 --run-name ablation_D
-```
-
-验证标准：
-
-- 四个 run 均能保存 `best_model.pth`
-- 每个 run 至少在 `tsp50_uniform_val_128` 和 `tsp50_ood_val_16` 上完成评测
-- 形成一张消融表，列出 `avg cost`、`avg gap`、`total time`
-
-如果算力不足，可以减少 epoch，但必须保证四组实验训练预算一致。
-
-## Step 7：处理 TSP-100 跨规模评测
-
-目标：确保最终模型可以在 TSP-100 上被外部脚本或本地脚本评测。
-
-需要完成：
-
-- 检查 `LCModel` 是否依赖固定节点数
-- 检查 `TSPEnv` 是否能在 `node_cnt=100, pomo_size=100` 下正常构造 mask
-- 检查 `evaluate_lc.py` 是否能通过参数创建 TSP-100 环境
-- 注意权重来自 TSP-50 训练，但模型结构本身应能接受不同节点数
-
-Milestone：
-
-```bash
-cd Project/baselines/lc_baseline
-python evaluate_lc.py --checkpoint checkpoints/best_model.pth --test-data ../../data/val/tsp100_uniform_val_16.txt --node-cnt 100 --pomo-size 100
-```
-
-验证标准：
-
-- 评测能跑完
-- 输出 TSP-100 的 cost/gap/time
-- 不出现 attention shape、mask shape、POMO index 越界等错误
-
-如果 TSP-100 表现很差，也可以作为报告中的泛化限制分析。
-
-## Step 8：可选实现混合规模训练
-
-目标：进一步改善 TSP-100 泛化。
-
-可选方案：
-
-- 训练时以一定概率使用 `node_cnt=100, pomo_size=100`
-- 或在每个 epoch 中混入少量 TSP-100 batch
-- 注意 batch size 可能需要降低，避免显存不足
-
-建议配置：
-
-```python
-MIXED_SCALE_TRAINING = True
-TSP100_PROB = 0.2
-TSP100_BATCH_SIZE = 16
-```
-
-Milestone：
-
-```bash
-cd Project/baselines/lc_baseline
-python train_lc.py --mixed-scale 1 --epochs 1 --batches-per-epoch 2
-```
-
-验证标准：
-
-- 训练日志能显示当前 batch 使用的是 TSP-50 还是 TSP-100
-- TSP-50 batch 和 TSP-100 batch 都能完成 forward/backward
-- 最终 checkpoint 能分别在 TSP-50 和 TSP-100 验证集上评测
-
-这是增强项，不是必须项；如果时间不足，优先保证 Step 3 到 Step 7。
-
-## Step 9：保存最终提交权重
-
-目标：让外部评测脚本能按作业要求自动加载模型。
-
-需要完成：
-
-- 选择验证表现最好的 run
-- 将其权重复制或保存为：
+建议新建：
 
 ```text
-Project/baselines/lc_baseline/checkpoints/best_model.pth
+Project/experiments/lc_dar_elg/
+  train_lc_elg.py
+  evaluate_lc_dar.py
+  eval_all_lc_dar.py
+  model/
+    local_policy.py
+    dar_wrapper.py
+    lc_elg_policy.py
+  results/
+  checkpoints/
 ```
 
-- 确保 `evaluate_lc.py` 中的 `model_params` 和 `env_params` 与最终模型兼容
-- 如果新增了模型参数，必须写进 `model_params`
+原则：
+
+- 不修改 `Project/baselines/lc_baseline/evaluate_lc.py`
+- 不修改 `Project/baselines/lc_baseline/train_lc.py`
+- 不修改 `Project/data/`
+
+## Step 1：复用并固定 baseline 评测（已完成）
+
+目标：
+
+- 把当前 long baseline 作为后续 DAR/ELG 的统一对照组。
+
+需要完成：
+
+- 确认 baseline 使用哪个 checkpoint 作为对照。
+- 用现有 `eval_all_lc.py` 再跑一次，固定 baseline JSON 输出位置。
 
 Milestone：
 
 ```bash
-cd Project/baselines/lc_baseline
-python evaluate_lc.py --checkpoint checkpoints/best_model.pth --test-data ../../data/val/tsp50_uniform_val_128.txt --node-cnt 50 --pomo-size 50
+conda run -n amla_tsp python Project/experiments/lc_eval/eval_all_lc.py   --checkpoint Project/baselines/lc_baseline/checkpoints/best_model.pth   --device cuda:0
 ```
 
-验证标准：
+可验证成果：
 
-- 不指定特殊训练目录时，默认 `checkpoints/best_model.pth` 可被加载
-- `model.load_state_dict(...)` 不报 missing key 或 unexpected key
-- 默认评测命令可以输出结果
+- 生成 baseline 的三验证集 JSON 结果。
+- 后续所有 DAR/ELG 结果都和这组 baseline 对比。
 
-这是最终提交前必须通过的检查。
+本次实际执行命令：
 
-## Step 10：整理 README 和技术报告
+```bash
+conda run -n amla_tsp python Project/experiments/lc_eval/eval_all_lc.py   --checkpoint Project/baselines/lc_baseline/checkpoints/best_model.pth   --device cuda:0   --results-dir Project/experiments/lc_eval/results/step1_baseline_refresh
+```
 
-目标：把代码改动和实验现象转化为可评分材料。
+本次实验结果：
 
-`README.md` 建议包含：
+| Dataset | Average cost | Average optimal | Average gap | Total time | Avg time / instance |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| tsp50_uniform | 12.8206 | 5.6709 | 126.30% | 2.91s | 0.0228s |
+| tsp50_ood | 9.9655 | 4.8343 | 105.72% | 0.55s | 0.0344s |
+| tsp100_uniform | 21.9777 | 7.8196 | 181.34% | 0.90s | 0.0562s |
 
-- 选择 LC/POMO 的原因
-- 主要改动：
-  - Leader Reward
-  - 几何对称增强
-  - 可选混合规模训练
-- 训练命令
-- 评测命令
-- 最终权重位置
+可验证成果对应结果：
 
-`Report.pdf` 建议包含：
+- **生成 baseline 的三验证集 JSON 结果**：已完成，结果写入 `Project/experiments/lc_eval/results/step1_baseline_refresh/`，包含：
+  - `tsp50_uniform.json`
+  - `tsp50_ood.json`
+  - `tsp100_uniform.json`
+  - `summary.json`
+- **后续所有 DAR/ELG 结果都和这组 baseline 对比**：已满足，这组结果现在可以作为后续所有实验的固定对照组；使用的 checkpoint 为 `Project/baselines/lc_baseline/checkpoints/best_model.pth`，设备为 `cuda:0`。
 
-- 方法概述
-- Leader Reward 复现说明
-- 几何增强设计
-- 实验设置
-- 三类验证集结果表
-- 消融实验表
-- 失败尝试和限制分析
+## Step 2：实现 DAR 的独立推理版
+
+目标：
+
+- 在不重训模型的前提下，先验证 DAR 是否能改善 OOD 和 TSP100 泛化。
+
+需要完成：
+
+- 新建 `Project/experiments/lc_dar_elg/model/dar_wrapper.py`
+- 在 decoder 输出 softmax 之前，拿到 `score_masked` 或等价 logits
+- 根据当前节点到所有候选节点的欧式距离构造 `distance_bias`
+- 支持至少以下参数：
+  - `--dar-enabled`
+  - `--dar-k`
+  - `--dar-alpha`
+  - `--dar-log-nearest 1/0`
+
+建议实现：
+
+- 先不改原 `LCModel` 文件。
+- 在新评测脚本中复制一份轻量推理路径，或写 wrapper 包住 decoder forward。
+- 第一版只做 **eval-time DAR**，不做训练期注入。
 
 Milestone：
 
 ```bash
-cd Project/baselines/lc_baseline
-python evaluate_lc.py --test-data ../../data/val/tsp50_uniform_val_128.txt --node-cnt 50 --pomo-size 50
-python evaluate_lc.py --test-data ../../data/val/tsp50_ood_val_16.txt --node-cnt 50 --pomo-size 50
-python evaluate_lc.py --test-data ../../data/val/tsp100_uniform_val_16.txt --node-cnt 100 --pomo-size 100
+conda run -n amla_tsp python Project/experiments/lc_dar_elg/evaluate_lc_dar.py \
+  --checkpoint Project/baselines/lc_baseline/checkpoints/best_model.pth \
+  --test-data Project/data/val/tsp50_ood_val_16.txt \
+  --node-cnt 50 \
+  --pomo-size 50 \
+  --dar-enabled 1 \
+  --dar-k 10 \
+  --dar-alpha 1.0 \
+  --device cuda:0
 ```
 
-验证标准：
+可验证成果：
 
-- 报告中的表格数字都能由命令复现
-- README 中的命令能直接运行
-- 最终提交目录满足作业接口要求
+- 评测脚本能在 `DAR off` / `DAR on` 两种模式都正常跑完。
+- 输出 JSON 中包含 `dar_k`、`dar_alpha` 和最终 `avg_cost/gap/time`。
+- 至少在一个验证集上出现可观测差异，不论更好还是更差。
 
-## 最小可交付版本
+## Step 3：做 DAR 小规模超参扫描
 
-如果时间紧，至少完成：
+目标：
 
-1. Step 1：跑通 LC baseline。
-2. Step 2：建立三类验证集评估。
-3. Step 3：实现 Leader Reward。
-4. Step 4：完成 baseline vs Leader Reward 消融。
-5. Step 9：保存最终 `checkpoints/best_model.pth`。
-6. Step 10：写清楚 README 和 Report。
+- 找到适合当前 LC baseline 的 DAR 超参数，而不是直接照搬论文。
 
-这已经足够形成一个完整的课程项目：有论文动机、有代码实现、有实验对比、有报告分析。
+需要完成：
 
-## 推荐最终实验表
+- 至少扫描：
+  - `K in {5, 10, 20, 50}`
+  - `alpha in {0.25, 0.5, 1.0, 2.0}`
+- 三个验证集都评估
+- 生成一张汇总表
+
+Milestone：
+
+```bash
+conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_dar.py \
+  --checkpoint Project/baselines/lc_baseline/checkpoints/best_model.pth \
+  --device cuda:0 \
+  --sweep-k 5,10,20,50 \
+  --sweep-alpha 0.25,0.5,1.0,2.0
+```
+
+可验证成果：
+
+- 输出 `summary.json` 和 `comparison.md`
+- 能回答三个问题：
+  - DAR 是否稳定提升 OOD？
+  - DAR 是否稳定提升 TSP100？
+  - 最优 K/alpha 是否和训练规模 50 节点有关？
+
+## Step 4：实现 ELG-lite 的局部策略
+
+目标：
+
+- 在当前 LC/POMO 架构上加入一个 TSP-only 的 local policy。
+
+需要完成：
+
+- 新建 `Project/experiments/lc_dar_elg/model/local_policy.py`
+- 每一步从当前节点提取 K 个最近未访问邻居
+- 为每个邻居构造局部特征，建议第一版使用：
+  - 相对坐标 `(dx, dy)`
+  - 相对距离 `r`
+  - 距离排序 index 的 positional encoding
+- 局部策略输出每个候选节点的 `u_local`
+- 对非局部邻居位置填 `0` 或 `-inf`，按实现方案固定
+
+建议第一版简化：
+
+- 不完整复现 ELG 的所有细节，先做一个 2~3 层 MLP / 小 Transformer 的 local scorer
+- 先只支持 TSP，不引入 CVRP 容量信息
+
+Milestone：
+
+```bash
+conda run -n amla_tsp python -m py_compile \
+  Project/experiments/lc_dar_elg/model/local_policy.py
+```
+
+可验证成果：
+
+- 局部策略模块可以独立 import
+- 给定 `(coords, current_node, visited_mask)` 能输出 `(batch, pomo, node)` 的局部 score
+- 对未入选的非邻居节点，mask 逻辑清晰且无 shape 错误
+
+## Step 5：实现 ELG-lite 训练入口
+
+目标：
+
+- 新建联合训练脚本，把全局 score 和局部 score 融合起来训练。
+
+需要完成：
+
+- 新建 `Project/experiments/lc_dar_elg/train_lc_elg.py`
+- 复用 `train_lc_leader.py` 的 CLI、checkpoint、seed、validation 逻辑
+- 支持参数：
+  - `--local-k`
+  - `--local-policy-dim`
+  - `--global-distance-penalty`
+  - `--joint-train`
+  - `--pretrain-global-epochs`
+- 训练时用：
+
+```text
+u_global_tilde = u_global + distance_penalty
+u_ens = u_global_tilde + beta * u_local
+loss = POMO-style REINFORCE on ensemble policy
+```
+
+Milestone：
+
+```bash
+CUDA_VISIBLE_DEVICES=5 conda run -n amla_tsp \
+  python Project/experiments/lc_dar_elg/train_lc_elg.py \
+  --run-name elg_smoke \
+  --epochs 1 \
+  --batches-per-epoch 2 \
+  --batch-size 4 \
+  --local-k 10 \
+  --device cuda:0
+```
+
+可验证成果：
+
+- 1 epoch smoke run 成功
+- 能保存 `best_model.pth`
+- 日志能打印：
+  - `global_score` 或其统计量
+  - `local_score` 或其统计量
+  - `ensemble loss`
+  - `val cost`
+
+## Step 6：做 ELG-lite 与 baseline 的同预算对比
+
+目标：
+
+- 判断局部策略是否比单纯 baseline 更稳地改善 OOD / TSP100。
+
+建议预算：
+
+```text
+epochs = 20
+batches_per_epoch = 50
+batch_size = 64
+val_interval = 5
+seed = 固定
+```
+
+Milestone：
+
+```bash
+CUDA_VISIBLE_DEVICES=5 conda run -n amla_tsp \
+  python Project/experiments/lc_dar_elg/train_lc_elg.py \
+  --run-name elg_e20_b50 \
+  --epochs 20 \
+  --batches-per-epoch 50 \
+  --batch-size 64 \
+  --val-interval 5 \
+  --local-k 10 \
+  --device cuda:0
+```
+
+可验证成果：
+
+- 训练曲线和 checkpoint 正常保存
+- 三验证集评测结果写入 `results/elg_e20_b50/`
+- 形成 baseline vs ELG-lite 表格
+
+## Step 7：组合 ELG-lite + DAR
+
+目标：
+
+- 在 ELG-lite 训练出的 checkpoint 上，再叠加 DAR 推理修正。
+
+需要完成：
+
+- `evaluate_lc_dar.py` 支持加载 ELG-lite checkpoint
+- 比较四组：
+  - baseline
+  - baseline + DAR
+  - ELG-lite
+  - ELG-lite + DAR
+
+Milestone：
+
+```bash
+conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_dar.py \
+  --checkpoint Project/experiments/lc_dar_elg/checkpoints/elg_e20_b50/best_model.pth \
+  --device cuda:0 \
+  --dar-enabled 1 \
+  --dar-k 10 \
+  --dar-alpha 1.0
+```
+
+可验证成果：
+
+- 生成四组对比表
+- 能回答：
+  - DAR 单独是否有效？
+  - ELG-lite 单独是否有效？
+  - 组合后是否叠加收益，还是互相抵消？
+
+## Step 8：完成最小消融
+
+目标：
+
+- 确认真正带来收益的是哪一部分。
+
+最低要求的消融：
+
+| 实验 | Local Policy | Global Distance Penalty | DAR |
+| --- | --- | --- | --- |
+| A | 关 | 关 | 关 |
+| B | 关 | 关 | 开 |
+| C | 开 | 开 | 关 |
+| D | 开 | 开 | 开 |
+
+Milestone：
+
+```bash
+conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_dar.py --preset ablation
+```
+
+可验证成果：
+
+- `ablation_summary.json`
+- `ablation.md`
+- 至少能判断收益主要来自：
+  - 推理期几何 bias
+  - 训练期局部策略
+  - 或两者组合
+
+## Step 9：决定是否值得作为主线 close 或继续
+
+建议 close / continue 判据：
+
+- 如果 `baseline + DAR` 已经能稳定改善 `tsp50_ood` 和 `tsp100_uniform`，这条路线值得继续。
+- 如果 `ELG-lite` 在同预算下仍然几乎没有提升，则不建议继续深挖完整 ELG 复现。
+- 如果 `ELG-lite + DAR` 的提升显著高于单独 DAR，说明“训练期局部策略 + 推理期几何重塑”的复合点成立，可以作为最终项目主线。
+
+最终可交付的最低版本：
+
+1. 复用 baseline 三验证集结果。
+2. 实现并验证 DAR inference patch。
+3. 做 DAR 超参扫描。
+4. 实现 ELG-lite smoke run。
+5. 给出 baseline / DAR / ELG-lite / ELG-lite+DAR 的对比表。
+
+## 推荐最终表格
 
 | 方法 | TSP-50 Uniform Gap | TSP-50 OOD Gap | TSP-100 Gap | Time |
 | --- | --- | --- | --- | --- |
 | LC baseline | 待填 | 待填 | 待填 | 待填 |
-| + Leader Reward | 待填 | 待填 | 待填 | 待填 |
-| + Augmentation | 待填 | 待填 | 待填 | 待填 |
-| + Leader Reward + Augmentation | 待填 | 待填 | 待填 | 待填 |
+| LC + DAR | 待填 | 待填 | 待填 | 待填 |
+| LC + ELG-lite | 待填 | 待填 | 待填 | 待填 |
+| LC + ELG-lite + DAR | 待填 | 待填 | 待填 | 待填 |
 
-报告中优先解释趋势，不要只追求单次最好数字。训练时间短时结果可能波动，应明确说明实验预算。
+## 当前结论
+
+和上一次相比，这条路线更值得做：
+
+- DAR 是低风险、强可验证、直接作用于 attention/logit 的方法。
+- ELG 是更重的训练增强，但与 POMO 风格骨架兼容。
+- 两者结合形成了一个合理、可解释、且有官方代码可对照的工作点。
+
+如果后续时间有限，优先级建议是：
+
+1. 先做 DAR。
+2. 再做 ELG-lite。
+3. 最后再做组合与消融。
