@@ -132,7 +132,35 @@ python evaluate_lc.py --test-data ../../data/val/tsp100_uniform_val_16.txt --nod
 
 这一步的结果就是报告中的 baseline 表格。
 
-## Step 3：实现 Leader Reward 训练目标
+## Step 3：实现 Leader Reward 训练目标（已完成）
+
+当前状态：
+
+- 未修改 `Project/baselines/` 和 `Project/data/` 中的原始文件。
+- 已新增独立训练入口：`Project/experiments/lc_leader/train_lc_leader.py`。
+- 依据 Leader Reward 论文，将同一问题 POMO rollout 中 reward 最大的 leader 轨迹 advantage 乘以 `--leader-reward-multiplier`，并保留 `--normalize-leader-advantage` 选项。
+- `--use-leader-reward 0` 时直接使用原始 POMO loss，训练路径退化为 baseline。
+- 脚本会打印 `POMO Loss`、`Leader Delta Loss`、`Loss`，并把 checkpoint 保存到 `Project/experiments/lc_leader/checkpoints/<run-name>/`，不覆盖 baseline checkpoint。
+
+本次 Step 3 验证结果：
+
+```text
+Leader Reward smoke run:
+  command: conda run -n amla_tsp python Project/experiments/lc_leader/train_lc_leader.py --run-name leader_smoke --epochs 1 --batches-per-epoch 2 --batch-size 4 --use-leader-reward 1 --leader-reward-multiplier 2.0 --device cuda:0
+  Train Length: 20.9161
+  Best Length: 15.7775
+  POMO Loss: -17.5356
+  Leader Delta Loss: 14.0245
+  Loss: -3.5111
+  Val Cost: 9.2306
+
+Baseline switch smoke run:
+  command: conda run -n amla_tsp python Project/experiments/lc_leader/train_lc_leader.py --run-name baseline_switch_smoke --epochs 1 --batches-per-epoch 1 --batch-size 4 --use-leader-reward 0 --device cuda:0
+  POMO Loss: -14.6136
+  Leader Delta Loss: 0.0000
+  Loss: -14.6136
+  Val Cost: 11.0196
+```
 
 目标：复现 Leader Reward 的核心思想，让训练目标更贴近 POMO 推理阶段“取最优 rollout”的行为。
 

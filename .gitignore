@@ -11,6 +11,9 @@ __pycache__/
 *.log
 wandb/
 
+# Experiment outputs
+Project/experiments/lc_leader/checkpoints/
+
 # Virtual environments
 .venv/
 venv/
