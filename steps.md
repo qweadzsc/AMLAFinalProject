@@ -203,7 +203,7 @@ conda run -n amla_tsp python Project/experiments/lc_eval/eval_all_lc.py   --chec
   - `summary.json`
 - **后续所有 DAR/ELG 结果都和这组 baseline 对比**：已满足，这组结果现在可以作为后续所有实验的固定对照组；使用的 checkpoint 为 `Project/baselines/lc_baseline/checkpoints/best_model.pth`，设备为 `cuda:0`。
 
-## Step 2：实现 DAR 的独立推理版
+## Step 2：实现 DAR 的独立推理版（已完成）
 
 目标：
 
@@ -229,15 +229,7 @@ conda run -n amla_tsp python Project/experiments/lc_eval/eval_all_lc.py   --chec
 Milestone：
 
 ```bash
-conda run -n amla_tsp python Project/experiments/lc_dar_elg/evaluate_lc_dar.py \
-  --checkpoint Project/baselines/lc_baseline/checkpoints/best_model.pth \
-  --test-data Project/data/val/tsp50_ood_val_16.txt \
-  --node-cnt 50 \
-  --pomo-size 50 \
-  --dar-enabled 1 \
-  --dar-k 10 \
-  --dar-alpha 1.0 \
-  --device cuda:0
+conda run -n amla_tsp python Project/experiments/lc_dar_elg/evaluate_lc_dar.py   --checkpoint Project/baselines/lc_baseline/checkpoints/best_model.pth   --test-data Project/data/val/tsp50_ood_val_16.txt   --node-cnt 50   --pomo-size 50   --dar-enabled 1   --dar-k 10   --dar-alpha 1.0   --device cuda:0
 ```
 
 可验证成果：
@@ -245,6 +237,42 @@ conda run -n amla_tsp python Project/experiments/lc_dar_elg/evaluate_lc_dar.py \
 - 评测脚本能在 `DAR off` / `DAR on` 两种模式都正常跑完。
 - 输出 JSON 中包含 `dar_k`、`dar_alpha` 和最终 `avg_cost/gap/time`。
 - 至少在一个验证集上出现可观测差异，不论更好还是更差。
+
+本次新增内容：
+
+- `Project/experiments/lc_dar_elg/model/dar_wrapper.py`
+- `Project/experiments/lc_dar_elg/evaluate_lc_dar.py`
+- `Project/experiments/lc_dar_elg/eval_all_lc_dar.py`
+
+本次实际执行命令：
+
+```bash
+conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_dar.py   --checkpoint Project/baselines/lc_baseline/checkpoints/best_model.pth   --device cuda:0   --dar-enabled 0   --dar-k 10   --dar-alpha 1.0   --results-dir Project/experiments/lc_dar_elg/results/step2_dar_off_k10_a1
+
+conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_dar.py   --checkpoint Project/baselines/lc_baseline/checkpoints/best_model.pth   --device cuda:0   --dar-enabled 1   --dar-k 10   --dar-alpha 1.0   --results-dir Project/experiments/lc_dar_elg/results/step2_dar_on_k10_a1
+```
+
+本次实验结果（DAR off vs DAR on, `k=10`, `alpha=1.0`）：
+
+| Dataset | DAR off cost | DAR on cost | Cost delta | DAR off gap | DAR on gap | Gap delta |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| tsp50_uniform | 12.8206 | 6.6961 | -6.1245 | 126.30% | 18.11% | -108.19% |
+| tsp50_ood | 9.9655 | 5.7463 | -4.2191 | 105.72% | 19.04% | -86.68% |
+| tsp100_uniform | 21.9777 | 9.1210 | -12.8567 | 181.34% | 16.64% | -164.70% |
+
+可验证成果对应结果：
+
+- **评测脚本能在 `DAR off` / `DAR on` 两种模式都正常跑完**：已完成。结果目录分别为：
+  - `Project/experiments/lc_dar_elg/results/step2_dar_off_k10_a1/`
+  - `Project/experiments/lc_dar_elg/results/step2_dar_on_k10_a1/`
+- **输出 JSON 中包含 `dar_k`、`dar_alpha` 和最终 `avg_cost/gap/time`**：已完成。JSON 输出位于上述两个目录及 `Project/experiments/lc_dar_elg/results/step2_comparison.json`。
+- **至少在一个验证集上出现可观测差异**：已完成，而且差异非常显著。当前 `k=10, alpha=1.0` 下，DAR 在三个验证集上都明显优于 DAR off。
+
+当前结论：
+
+- 对当前弱 baseline checkpoint 而言，DAR 是一个非常强的 inference-time patch。
+- 它不仅改善 OOD 和 TSP100，也显著改善 TSP50 uniform。
+- 下一步需要做 Step 3 超参扫描，确认这种提升是否对 `K` 和 `alpha` 稳定，而不是只在单点参数上偶然成立。
 
 ## Step 3：做 DAR 小规模超参扫描
 
