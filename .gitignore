@@ -1,0 +1,18 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# macOS metadata
+.DS_Store
+._*
+
+# Logs and local runtime files
+*.log
+wandb/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
