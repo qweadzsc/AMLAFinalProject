@@ -6,10 +6,12 @@ baseline model/environment interfaces.
 
 import argparse
 import json
+import random
 import sys
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import torch
 from ml4co_kit import TSPSolver
 from tqdm import tqdm
@@ -42,6 +44,7 @@ def parse_args():
     parser.add_argument("--batches-per-epoch", type=int, default=2)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
+    parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--node-cnt", type=int, default=50)
     parser.add_argument("--pomo-size", type=int, default=50)
     parser.add_argument("--use-leader-reward", type=int, choices=[0, 1], default=1)
@@ -65,6 +68,14 @@ def parse_args():
     )
     parser.add_argument("--device", default="cuda:0" if torch.cuda.is_available() else "cpu")
     return parser.parse_args()
+
+
+def set_seed(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 def configure_device(device: str) -> None:
@@ -177,6 +188,7 @@ def average_metrics(metrics):
 
 def main():
     args = parse_args()
+    set_seed(args.seed)
     configure_device(args.device)
 
     run_name = args.run_name or datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -197,6 +209,7 @@ def main():
     print(f"Epochs:                   {args.epochs}")
     print(f"Batches per epoch:        {args.batches_per_epoch}")
     print(f"Batch size:               {args.batch_size}")
+    print(f"Seed:                     {args.seed}")
     print(f"Use Leader Reward:        {bool(args.use_leader_reward)}")
     print(f"LR multiplier:            {args.leader_reward_multiplier}")
     print(f"Normalize LR advantage:   {bool(args.normalize_leader_advantage)}")

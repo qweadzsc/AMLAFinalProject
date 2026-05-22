@@ -1,0 +1,35 @@
+{
+  "tsp50_uniform": {
+    "num_instances": 128,
+    "avg_cost": 6.63800086453557,
+    "std_cost": 0.34988063852632423,
+    "total_time": 3.0020477771759033,
+    "avg_time_per_instance": 0.023453498259186745,
+    "avg_optimal_cost": 5.670871857207975,
+    "std_optimal_cost": 0.23738528816275256,
+    "avg_gap": 17.079647778389308,
+    "std_gap": 4.497114495884836
+  },
+  "tsp50_ood": {
+    "num_instances": 16,
+    "avg_cost": 5.743004679679871,
+    "std_cost": 0.4523336170417845,
+    "total_time": 0.5434038639068604,
+    "avg_time_per_instance": 0.03396274149417877,
+    "avg_optimal_cost": 4.834320397264452,
+    "std_optimal_cost": 0.38496067002380496,
+    "avg_gap": 18.91065264601212,
+    "std_gap": 4.955974695223531
+  },
+  "tsp100_uniform": {
+    "num_instances": 16,
+    "avg_cost": 10.380582630634308,
+    "std_cost": 0.3996674198073868,
+    "total_time": 0.8615012168884277,
+    "avg_time_per_instance": 0.05384382605552673,
+    "avg_optimal_cost": 7.819554002480215,
+    "std_optimal_cost": 0.22257522891424583,
+    "avg_gap": 32.74550047155314,
+    "std_gap": 3.220531502133018
+  }
+}

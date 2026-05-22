@@ -1,0 +1,35 @@
+[
+  {
+    "dataset": "tsp50_uniform",
+    "baseline_cost": 6.676974646747112,
+    "leader_cost": 6.63800086453557,
+    "cost_delta": -0.03897378221154213,
+    "baseline_gap": 17.750551027276156,
+    "leader_gap": 17.079647778389308,
+    "gap_delta": -0.670903248886848,
+    "baseline_time": 2.891244888305664,
+    "leader_time": 3.0020477771759033
+  },
+  {
+    "dataset": "tsp50_ood",
+    "baseline_cost": 5.740661650896072,
+    "leader_cost": 5.743004679679871,
+    "cost_delta": 0.0023430287837982178,
+    "baseline_gap": 18.8350877750098,
+    "leader_gap": 18.91065264601212,
+    "gap_delta": 0.0755648710023209,
+    "baseline_time": 0.5425081253051758,
+    "leader_time": 0.5434038639068604
+  },
+  {
+    "dataset": "tsp100_uniform",
+    "baseline_cost": 10.53703397512436,
+    "leader_cost": 10.380582630634308,
+    "cost_delta": -0.15645134449005127,
+    "baseline_gap": 34.76911992463474,
+    "leader_gap": 32.74550047155314,
+    "gap_delta": -2.0236194530815936,
+    "baseline_time": 0.8968915939331055,
+    "leader_time": 0.8615012168884277
+  }
+]

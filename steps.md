@@ -210,7 +210,25 @@ python train_lc.py
 
 报告中可以把这一项作为主要论文复现点。
 
-## Step 4：做 Leader Reward 消融实验
+## Step 4：做 Leader Reward 消融实验（已完成）
+
+当前状态：
+
+- 未修改 `Project/baselines/` 和 `Project/data/` 中的原始文件。
+- 使用 `Project/experiments/lc_leader/train_lc_leader.py` 分别训练 baseline 与 Leader Reward 版本。
+- 两组训练使用相同预算和 seed：`5 epochs`、`20 batches/epoch`、`batch size 64`、`seed 20260522`。
+- 训练 checkpoint 保存在 `Project/experiments/lc_leader/checkpoints/`，该目录已被 `.gitignore` 忽略。
+- 三类验证集评估结果保存在 `Project/experiments/lc_leader/results/`。
+
+本次 Step 4 消融结果：
+
+| Dataset | Baseline cost | Leader cost | Cost delta | Baseline gap | Leader gap | Gap delta |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| tsp50_uniform | 6.6770 | 6.6380 | -0.0390 | 17.75% | 17.08% | -0.67% |
+| tsp50_ood | 5.7407 | 5.7430 | +0.0023 | 18.84% | 18.91% | +0.07% |
+| tsp100_uniform | 10.5370 | 10.3806 | -0.1564 | 34.77% | 32.75% | -2.01% |
+
+结论：在这组短训练预算下，Leader Reward 对 TSP-50 uniform 和 TSP-100 有小幅提升，对 OOD 基本持平略差。结果说明该目标函数有正向信号，但训练长度较短，后续应做更长训练或多 seed 验证稳定性。
 
 目标：验证 Leader Reward 是否真的带来改进，或者至少得到可分析的实验现象。
 
