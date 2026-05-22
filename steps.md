@@ -387,6 +387,47 @@ conda run -n amla_tsp python Project/experiments/lc_dar_elg/sweep_dar.py   --che
   - 在 TSP100 上也接近最优
 - 如果后续目标更偏跨规模泛化，可优先考虑 `k=10, alpha=2.0`；如果更偏 uniform-50，可考虑 `k=50, alpha=2.0`。
 
+补充复查：更大的 alpha 扫描（`alpha in {3.0, 4.0, 6.0, 8.0}`）
+
+由于上一轮扫描的最优点落在上界 `alpha=2.0`，本次继续在长训练 baseline 上扩大 alpha 搜索范围：
+
+```bash
+conda run -n amla_tsp python Project/experiments/lc_dar_elg/sweep_dar.py   --checkpoint Project/experiments/lc_leader/checkpoints/long_baseline_e80_b50_seed20260522_gpu5/best_model.pth   --device cuda:0   --sweep-k 5,10,20,50   --sweep-alpha 3.0,4.0,6.0,8.0   --results-dir Project/experiments/lc_dar_elg/results/step3_long_baseline_sweep_alpha_extended
+```
+
+扩展扫描结果：
+
+| Run | K | Alpha | TSP50 Uniform Gap | TSP50 OOD Gap | TSP100 Gap | Mean Gap |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| k5_a3p0 | 5 | 3.00 | 3.96% | 5.83% | 6.92% | 5.57% |
+| k5_a4p0 | 5 | 4.00 | 4.14% | 5.35% | 7.29% | 5.59% |
+| k5_a6p0 | 5 | 6.00 | 4.37% | 6.34% | 7.13% | 5.95% |
+| k5_a8p0 | 5 | 8.00 | 4.71% | 6.83% | 7.45% | 6.33% |
+| k10_a3p0 | 10 | 3.00 | 3.81% | 5.84% | 6.39% | 5.35% |
+| k10_a4p0 | 10 | 4.00 | 3.80% | 5.45% | 6.73% | 5.33% |
+| k10_a6p0 | 10 | 6.00 | 4.00% | 5.70% | 6.72% | 5.47% |
+| k10_a8p0 | 10 | 8.00 | 4.31% | 6.33% | 6.63% | 5.75% |
+| k20_a3p0 | 20 | 3.00 | 3.73% | 5.85% | 6.47% | 5.35% |
+| k20_a4p0 | 20 | 4.00 | 3.74% | 5.87% | 6.71% | 5.44% |
+| k20_a6p0 | 20 | 6.00 | 3.91% | 5.82% | 6.49% | 5.40% |
+| k20_a8p0 | 20 | 8.00 | 4.27% | 6.00% | 6.58% | 5.62% |
+| k50_a3p0 | 50 | 3.00 | 3.73% | 5.85% | 6.47% | 5.35% |
+| k50_a4p0 | 50 | 4.00 | 3.75% | 5.87% | 6.71% | 5.44% |
+| k50_a6p0 | 50 | 6.00 | 3.91% | 5.82% | 6.46% | 5.40% |
+| k50_a8p0 | 50 | 8.00 | 4.27% | 6.00% | 6.58% | 5.62% |
+
+扩展扫描结论：
+
+- `alpha=2.0` 不是最优，继续增大到 `3.0~4.0` 还能进一步改善。
+- 但 `alpha` 不是越大越好；当增大到 `6.0` 和 `8.0` 后，平均 gap 开始回升，出现过冲。
+- 新的最佳平均配置变为：`k=10, alpha=4.0`，mean gap `5.33%`。
+- 单数据集最优分别为：
+  - `tsp50_uniform`: `k=20, alpha=3.0`，gap `3.73%`
+  - `tsp50_ood`: `k=5, alpha=4.0`，gap `5.35%`
+  - `tsp100_uniform`: `k=10, alpha=3.0`，gap `6.39%`
+- 因此，当前更合理的默认值应从 `k=20, alpha=2.0` 修正为 `k=10, alpha=4.0`。
+- 如果更强调跨规模和平均表现，优先使用 `k=10, alpha=4.0`；如果更强调 uniform-50，可考虑 `k=20, alpha=3.0`。
+
 ## Step 4：实现 ELG-lite 的局部策略
 
 目标：

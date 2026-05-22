@@ -1,0 +1,47 @@
+{
+  "tsp50_uniform": {
+    "num_instances": 128,
+    "avg_cost": 5.915358379483223,
+    "std_cost": 0.2865113056122289,
+    "total_time": 5.034052848815918,
+    "avg_time_per_instance": 0.03932853788137436,
+    "dar_enabled": true,
+    "dar_k": 10,
+    "dar_alpha": 8.0,
+    "dar_log_nearest": true,
+    "avg_optimal_cost": 5.670871857207975,
+    "std_optimal_cost": 0.23738528816275256,
+    "avg_gap": 4.307124242373975,
+    "std_gap": 2.383726070504123
+  },
+  "tsp50_ood": {
+    "num_instances": 16,
+    "avg_cost": 5.139311581850052,
+    "std_cost": 0.4143185140915829,
+    "total_time": 1.1203644275665283,
+    "avg_time_per_instance": 0.07002277672290802,
+    "dar_enabled": true,
+    "dar_k": 10,
+    "dar_alpha": 8.0,
+    "dar_log_nearest": true,
+    "avg_optimal_cost": 4.834320397264452,
+    "std_optimal_cost": 0.38496067002380496,
+    "avg_gap": 6.326010555425496,
+    "std_gap": 2.5286010010270976
+  },
+  "tsp100_uniform": {
+    "num_instances": 16,
+    "avg_cost": 8.336659491062164,
+    "std_cost": 0.2644755679822707,
+    "total_time": 1.7181057929992676,
+    "avg_time_per_instance": 0.10738161206245422,
+    "dar_enabled": true,
+    "dar_k": 10,
+    "dar_alpha": 8.0,
+    "dar_log_nearest": true,
+    "avg_optimal_cost": 7.819554002480215,
+    "std_optimal_cost": 0.22257522891424583,
+    "avg_gap": 6.629623024593592,
+    "std_gap": 2.40220941186538
+  }
+}
