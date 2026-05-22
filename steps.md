@@ -531,7 +531,7 @@ score_sample [0.0, -0.07337877154350281, 0.08090023696422577, 0.0, 0.0, 0.0, 0.0
 - 后续长时间 sweep / eval 任务也已经补充了更明显的 `print` 和 `tqdm`，避免运行中长时间无输出。
 - 下一步可以进入 Step 5，把 `u_local` 接入训练入口，和 global score 组成 `u_ens` 做 smoke run。
 
-## Step 5：实现 ELG-lite 训练入口
+## Step 5：实现 ELG-lite 训练入口（已完成）
 
 目标：
 
@@ -558,14 +558,7 @@ loss = POMO-style REINFORCE on ensemble policy
 Milestone：
 
 ```bash
-CUDA_VISIBLE_DEVICES=5 conda run -n amla_tsp \
-  python Project/experiments/lc_dar_elg/train_lc_elg.py \
-  --run-name elg_smoke \
-  --epochs 1 \
-  --batches-per-epoch 2 \
-  --batch-size 4 \
-  --local-k 10 \
-  --device cuda:0
+CUDA_VISIBLE_DEVICES=5 conda run -n amla_tsp   python Project/experiments/lc_dar_elg/train_lc_elg.py   --run-name elg_smoke   --epochs 1   --batches-per-epoch 2   --batch-size 4   --local-k 10   --device cuda:0
 ```
 
 可验证成果：
@@ -577,6 +570,51 @@ CUDA_VISIBLE_DEVICES=5 conda run -n amla_tsp \
   - `local_score` 或其统计量
   - `ensemble loss`
   - `val cost`
+
+本次新增内容：
+
+- `Project/experiments/lc_dar_elg/train_lc_elg.py`
+
+本次实际执行命令：
+
+```bash
+CUDA_VISIBLE_DEVICES=5 conda run -n amla_tsp python Project/experiments/lc_dar_elg/train_lc_elg.py   --run-name elg_smoke_v2   --epochs 1   --batches-per-epoch 2   --batch-size 4   --val-interval 1   --local-k 10   --local-policy-dim 64   --local-score-weight 1.0   --global-distance-penalty 0.5   --joint-train 1   --pretrain-global-epochs 0   --device cuda:0
+```
+
+本次验证结果：
+
+```text
+[train_lc_elg] epoch=1 batch=1/2 loss=-7.2768 avg_len=18.6791 global_abs=1.4317 local_abs=0.0458
+[train_lc_elg] epoch=1 batch=2/2 loss=-10.0298 avg_len=15.7449 global_abs=2.0159 local_abs=0.0447
+Epoch 1/1 - Train Length: 17.2120, Best Length: 13.7939, Loss: -8.6533,
+Global Score Abs: 1.7238, Local Score Abs: 0.0453, Distance Abs: 0.2269,
+Effective Local Weight: 1.00, Val Cost: 6.7229 | *** New best model saved ***
+Training completed. Best validation cost: 6.7229
+```
+
+保存产物：
+
+- `Project/experiments/lc_dar_elg/checkpoints/elg_smoke_v2/best_model.pth`
+- `Project/experiments/lc_dar_elg/checkpoints/elg_smoke_v2/model_epoch_1_cost_6.7229.pth`
+- `Project/experiments/lc_dar_elg/checkpoints/elg_smoke_v2/history.json`
+- `Project/experiments/lc_dar_elg/checkpoints/elg_smoke_v2/config.json`
+
+可验证成果对应结果：
+
+- **1 epoch smoke run 成功**：已完成，`elg_smoke_v2` 跑通 1 个 epoch 和 1 次验证。
+- **能保存 `best_model.pth`**：已完成，checkpoint 已写入 `Project/experiments/lc_dar_elg/checkpoints/elg_smoke_v2/`。
+- **日志能打印 `global_score/local_score/ensemble loss/val cost`**：已完成。当前日志中已包含：
+  - `Loss: -8.6533`
+  - `Global Score Abs: 1.7238`
+  - `Local Score Abs: 0.0453`
+  - `Val Cost: 6.7229`
+
+当前结论：
+
+- Step 5 的最小目标已经完成，ELG-lite 训练入口已具备。
+- 当前实现支持 joint training、global distance penalty、local score weight，以及 pretrain-global-epochs 这类后续实验所需的关键开关。
+- 训练和验证阶段都已加入更明显的 `print` / `tqdm`，后续长时间运行时不会再长时间静默。
+- 下一步可以进入 Step 6，用一致预算训练一个 ELG-lite 版本，并和 baseline / DAR 做对比。
 
 ## Step 6：做 ELG-lite 与 baseline 的同预算对比
 

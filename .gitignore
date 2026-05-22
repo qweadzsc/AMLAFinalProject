@@ -19,3 +19,6 @@ Project/experiments/lc_leader/checkpoints/
 venv/
 env/
 
+
+# ELG-lite checkpoints
+Project/experiments/lc_dar_elg/checkpoints/

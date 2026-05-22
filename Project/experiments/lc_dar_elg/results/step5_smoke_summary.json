@@ -1,0 +1,20 @@
+{
+  "run_name": "elg_smoke_v2",
+  "checkpoint_dir": "Project/experiments/lc_dar_elg/checkpoints/elg_smoke_v2",
+  "best_checkpoint": "Project/experiments/lc_dar_elg/checkpoints/elg_smoke_v2/best_model.pth",
+  "history": [
+    {
+      "global_abs_mean": 1.7237937255781524,
+      "local_abs_mean": 0.045271422010751405,
+      "distance_abs_mean": 0.22688056256774128,
+      "ensemble_abs_mean": 1.7344663520248567,
+      "effective_local_weight": 1.0,
+      "avg_length": 17.211991786956787,
+      "best_length": 13.793868064880371,
+      "loss": -8.653315782546997,
+      "advantage_abs_mean": 1.1812676787376404,
+      "epoch": 1,
+      "val_cost": 6.722906485199928
+    }
+  ]
+}
