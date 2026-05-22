@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tqdm import tqdm
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 THIS_DIR = Path(__file__).resolve().parent
@@ -50,11 +52,12 @@ def main():
 
     sweep_results = {}
 
-    for k in ks:
-        for alpha in alphas:
-            run_name = f"k{k}_a{str(alpha).replace('.', 'p')}"
-            run_dir = args.results_dir / run_name
-            cmd = [
+    grid = [(k, alpha) for k in ks for alpha in alphas]
+    for k, alpha in tqdm(grid, desc="DAR sweep", unit="run"):
+        run_name = f"k{k}_a{str(alpha).replace('.', 'p')}"
+        run_dir = args.results_dir / run_name
+        print(f"[sweep_dar] start run={run_name} checkpoint={args.checkpoint.name}", flush=True)
+        cmd = [
                 sys.executable,
                 str(THIS_DIR / "eval_all_lc_dar.py"),
                 "--checkpoint",
@@ -72,8 +75,10 @@ def main():
                 "--results-dir",
                 str(run_dir),
             ]
-            subprocess.run(cmd, check=True)
-            sweep_results[run_name] = json.loads((run_dir / "summary.json").read_text())
+        subprocess.run(cmd, check=True)
+        sweep_results[run_name] = json.loads((run_dir / "summary.json").read_text())
+        mean_gap = sum(sweep_results[run_name][name]["avg_gap"] for name in DATASET_ORDER) / len(DATASET_ORDER)
+        print(f"[sweep_dar] finished run={run_name} mean_gap={mean_gap:.2f}%", flush=True)
 
     summary_path = args.results_dir / "sweep_summary.json"
     summary_path.write_text(json.dumps(sweep_results, indent=2) + "\n")
@@ -138,8 +143,8 @@ def main():
         json.dumps({"best_by_dataset": best_by_dataset, "best_mean": best_mean}, indent=2) + "\n"
     )
 
-    print(f"Wrote sweep summary to {summary_path}")
-    print(f"Wrote comparison table to {comparison_path}")
+    print(f"[sweep_dar] wrote sweep summary to {summary_path}", flush=True)
+    print(f"[sweep_dar] wrote comparison table to {comparison_path}", flush=True)
 
 
 if __name__ == "__main__":

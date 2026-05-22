@@ -46,6 +46,11 @@ def main():
 
     for name, rel_data, node_cnt, pomo_size in DATASETS:
         output_json = args.results_dir / f"{name}.json"
+        print(
+            f"[eval_all_lc_dar] dataset={name} node_cnt={node_cnt} pomo_size={pomo_size} "
+            f"dar_enabled={bool(args.dar_enabled)} dar_k={args.dar_k} dar_alpha={args.dar_alpha}",
+            flush=True,
+        )
         cmd = [
             sys.executable,
             str(THIS_DIR / "evaluate_lc_dar.py"),
@@ -72,10 +77,15 @@ def main():
         ]
         subprocess.run(cmd, check=True)
         summary[name] = json.loads(output_json.read_text())
+        print(
+            f"[eval_all_lc_dar] finished dataset={name} avg_cost={summary[name]['avg_cost']:.4f} "
+            f"avg_gap={summary[name].get('avg_gap', float('nan')):.2f}%",
+            flush=True,
+        )
 
     summary_path = args.results_dir / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2) + "\n")
-    print(f"Wrote summary to {summary_path}")
+    print(f"[eval_all_lc_dar] wrote summary to {summary_path}", flush=True)
 
 
 if __name__ == "__main__":

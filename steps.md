@@ -428,7 +428,7 @@ conda run -n amla_tsp python Project/experiments/lc_dar_elg/sweep_dar.py   --che
 - 因此，当前更合理的默认值应从 `k=20, alpha=2.0` 修正为 `k=10, alpha=4.0`。
 - 如果更强调跨规模和平均表现，优先使用 `k=10, alpha=4.0`；如果更强调 uniform-50，可考虑 `k=20, alpha=3.0`。
 
-## Step 4：实现 ELG-lite 的局部策略
+## Step 4：实现 ELG-lite 的局部策略（已完成）
 
 目标：
 
@@ -453,8 +453,7 @@ conda run -n amla_tsp python Project/experiments/lc_dar_elg/sweep_dar.py   --che
 Milestone：
 
 ```bash
-conda run -n amla_tsp python -m py_compile \
-  Project/experiments/lc_dar_elg/model/local_policy.py
+conda run -n amla_tsp python -m py_compile   Project/experiments/lc_dar_elg/model/local_policy.py
 ```
 
 可验证成果：
@@ -462,6 +461,75 @@ conda run -n amla_tsp python -m py_compile \
 - 局部策略模块可以独立 import
 - 给定 `(coords, current_node, visited_mask)` 能输出 `(batch, pomo, node)` 的局部 score
 - 对未入选的非邻居节点，mask 逻辑清晰且无 shape 错误
+
+本次新增内容：
+
+- `Project/experiments/lc_dar_elg/model/local_policy.py`
+
+本次实际执行命令：
+
+```bash
+python -m py_compile Project/experiments/lc_dar_elg/model/local_policy.py
+
+python - <<'PY2'
+import sys
+from pathlib import Path
+import torch
+sys.path.insert(0, str(Path('Project/experiments/lc_dar_elg/model').resolve()))
+from local_policy import LocalPolicyScorer
+
+batch_size = 2
+pomo_size = 3
+node_cnt = 7
+coords = torch.tensor([
+    [[0.0,0.0],[0.1,0.0],[0.2,0.0],[0.3,0.0],[0.4,0.0],[0.5,0.0],[0.6,0.0]],
+    [[0.0,0.0],[0.0,0.1],[0.0,0.2],[0.0,0.3],[0.0,0.4],[0.0,0.5],[0.0,0.6]],
+], dtype=torch.float32)
+current_node = torch.tensor([[0, 2, 4],[1, 3, 5]], dtype=torch.long)
+visited_mask = torch.zeros((batch_size, pomo_size, node_cnt), dtype=torch.bool)
+visited_mask[0,0,0] = True
+visited_mask[0,0,3] = True
+visited_mask[0,1,2] = True
+visited_mask[0,1,5] = True
+visited_mask[0,2,4] = True
+visited_mask[1,0,1] = True
+visited_mask[1,1,3] = True
+visited_mask[1,2,5] = True
+model = LocalPolicyScorer(hidden_dim=32, local_k=2, max_positional_rank=16, non_neighbor_value=0.0)
+score = model(coords, current_node, visited_mask)
+nonzero = (score != 0).sum(dim=2)
+print('score_shape', tuple(score.shape))
+print('nonzero_counts', nonzero.tolist())
+print('visited_zero', bool((score[visited_mask] == 0).all()))
+print('score_sample', score[0,0].tolist())
+PY2
+```
+
+本次验证结果：
+
+```text
+score_shape (2, 3, 7)
+nonzero_counts [[2, 2, 2], [2, 2, 2]]
+visited_zero True
+score_sample [0.0, -0.07337877154350281, 0.08090023696422577, 0.0, 0.0, 0.0, 0.0]
+```
+
+额外产物：
+
+- `Project/experiments/lc_dar_elg/results/step4_local_policy_validation.json`
+
+可验证成果对应结果：
+
+- **局部策略模块可以独立 import**：已完成，`LocalPolicyScorer` 可以从 `Project/experiments/lc_dar_elg/model/local_policy.py` 直接导入。
+- **给定 `(coords, current_node, visited_mask)` 能输出 `(batch, pomo, node)` 的局部 score**：已完成，测试输出 `score_shape (2, 3, 7)`。
+- **对未入选的非邻居节点，mask 逻辑清晰且无 shape 错误**：已完成，测试中设置 `local_k=2` 后，每个 `(batch, pomo)` 仅有 2 个非零局部分数；`nonzero_counts` 为 `[[2, 2, 2], [2, 2, 2]]`，且 `visited_zero True` 表明 visited 节点得分被正确置为 `0`。
+
+当前结论：
+
+- Step 4 的最小目标已经完成，ELG-lite 需要的局部打分模块已经具备。
+- 当前实现选择将非邻居节点填为 `0`，这样后续更适合与 global score 直接相加，而不是硬性屏蔽。
+- 后续长时间 sweep / eval 任务也已经补充了更明显的 `print` 和 `tqdm`，避免运行中长时间无输出。
+- 下一步可以进入 Step 5，把 `u_local` 接入训练入口，和 global score 组成 `u_ens` 做 smoke run。
 
 ## Step 5：实现 ELG-lite 训练入口
 
