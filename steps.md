@@ -304,7 +304,7 @@ conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_dar.py  
 
 - 下一步需要做 Step 3 超参扫描，确认这种提升是否对 `K` 和 `alpha` 稳定，而不是只在单点参数上偶然成立。
 
-## Step 3：做 DAR 小规模超参扫描
+## Step 3：做 DAR 小规模超参扫描（已完成）
 
 目标：
 
@@ -321,11 +321,7 @@ conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_dar.py  
 Milestone：
 
 ```bash
-conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_dar.py \
-  --checkpoint Project/baselines/lc_baseline/checkpoints/best_model.pth \
-  --device cuda:0 \
-  --sweep-k 5,10,20,50 \
-  --sweep-alpha 0.25,0.5,1.0,2.0
+conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_dar.py   --checkpoint Project/baselines/lc_baseline/checkpoints/best_model.pth   --device cuda:0   --sweep-k 5,10,20,50   --sweep-alpha 0.25,0.5,1.0,2.0
 ```
 
 可验证成果：
@@ -335,6 +331,61 @@ conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_dar.py \
   - DAR 是否稳定提升 OOD？
   - DAR 是否稳定提升 TSP100？
   - 最优 K/alpha 是否和训练规模 50 节点有关？
+
+本次实际执行命令：
+
+```bash
+conda run -n amla_tsp python Project/experiments/lc_dar_elg/sweep_dar.py   --checkpoint Project/experiments/lc_leader/checkpoints/long_baseline_e80_b50_seed20260522_gpu5/best_model.pth   --device cuda:0   --sweep-k 5,10,20,50   --sweep-alpha 0.25,0.5,1.0,2.0   --results-dir Project/experiments/lc_dar_elg/results/step3_long_baseline_sweep
+```
+
+本次实验结果（80 epoch 长训练 baseline）：
+
+| Run | K | Alpha | TSP50 Uniform Gap | TSP50 OOD Gap | TSP100 Gap | Mean Gap |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| k5_a0p25 | 5 | 0.25 | 4.58% | 7.75% | 9.47% | 7.27% |
+| k5_a0p5 | 5 | 0.50 | 4.43% | 7.35% | 8.58% | 6.79% |
+| k5_a1p0 | 5 | 1.00 | 4.18% | 6.39% | 7.54% | 6.04% |
+| k5_a2p0 | 5 | 2.00 | 3.99% | 6.47% | 7.19% | 5.88% |
+| k10_a0p25 | 10 | 0.25 | 4.64% | 7.87% | 9.65% | 7.39% |
+| k10_a0p5 | 10 | 0.50 | 4.44% | 7.45% | 8.72% | 6.87% |
+| k10_a1p0 | 10 | 1.00 | 4.09% | 6.34% | 7.69% | 6.04% |
+| k10_a2p0 | 10 | 2.00 | 3.88% | 6.25% | 6.80% | 5.65% |
+| k20_a0p25 | 20 | 0.25 | 4.65% | 7.93% | 9.67% | 7.42% |
+| k20_a0p5 | 20 | 0.50 | 4.43% | 7.14% | 8.75% | 6.77% |
+| k20_a1p0 | 20 | 1.00 | 4.12% | 6.70% | 7.66% | 6.16% |
+| k20_a2p0 | 20 | 2.00 | 3.85% | 5.82% | 6.89% | 5.52% |
+| k50_a0p25 | 50 | 0.25 | 4.65% | 7.93% | 9.67% | 7.42% |
+| k50_a0p5 | 50 | 0.50 | 4.43% | 7.38% | 8.75% | 6.85% |
+| k50_a1p0 | 50 | 1.00 | 4.12% | 6.71% | 7.66% | 6.16% |
+| k50_a2p0 | 50 | 2.00 | 3.84% | 5.96% | 6.91% | 5.57% |
+
+最佳结果：
+
+- `tsp50_uniform` 最优：`k50_a2p0`，gap `3.84%`
+- `tsp50_ood` 最优：`k20_a2p0`，gap `5.82%`
+- `tsp100_uniform` 最优：`k10_a2p0`，gap `6.80%`
+- 平均 gap 最优：`k20_a2p0`，mean gap `5.52%`
+
+可验证成果对应结果：
+
+- **输出 `summary.json` 和 `comparison.md`**：已完成，位于 `Project/experiments/lc_dar_elg/results/step3_long_baseline_sweep/`。
+- **DAR 是否稳定提升 OOD？**：是。长训练 baseline 的 OOD gap 为 `8.95%`；本次 16 组 sweep 中所有组合都优于 baseline，最差也为 `7.93%`，最好为 `5.82%`。
+- **DAR 是否稳定提升 TSP100？**：是。长训练 baseline 的 TSP100 gap 为 `10.55%`；本次 16 组 sweep 中所有组合都优于 baseline，最差为 `9.67%`，最好为 `6.80%`。
+- **最优 K/alpha 是否和训练规模 50 节点有关？**：有一定关系。`alpha=2.0` 在所有数据集上都最强，但最优 `K` 并不统一：
+  - Uniform-50 偏好更大的 `K=50`
+  - OOD-50 偏好中等窗口 `K=20`
+  - TSP100 偏好更局部的 `K=10`
+  这说明 `alpha` 更稳定，而 `K` 与目标分布/规模有关。
+
+当前结论：
+
+- DAR 在长训练 baseline 上不是单点偶然提升，而是对较宽的超参数范围都有效。
+- `alpha` 从 `0.25 -> 2.0` 基本呈现持续改善趋势，说明当前模型更需要较强的距离 bias。
+- 作为后续默认配置，最稳妥的候选是 `k=20, alpha=2.0`：
+  - 它给出最佳平均 gap
+  - 对 OOD 最优
+  - 在 TSP100 上也接近最优
+- 如果后续目标更偏跨规模泛化，可优先考虑 `k=10, alpha=2.0`；如果更偏 uniform-50，可考虑 `k=50, alpha=2.0`。
 
 ## Step 4：实现 ELG-lite 的局部策略
 

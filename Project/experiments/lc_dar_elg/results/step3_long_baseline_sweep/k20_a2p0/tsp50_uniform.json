@@ -1,0 +1,15 @@
+{
+  "num_instances": 128,
+  "avg_cost": 5.889130648225546,
+  "std_cost": 0.26849860192215796,
+  "total_time": 5.139454364776611,
+  "avg_time_per_instance": 0.040151987224817276,
+  "dar_enabled": true,
+  "dar_k": 20,
+  "dar_alpha": 2.0,
+  "dar_log_nearest": true,
+  "avg_optimal_cost": 5.670871857207975,
+  "std_optimal_cost": 0.23738528816275256,
+  "avg_gap": 3.849824947446358,
+  "std_gap": 1.9395658363784212
+}

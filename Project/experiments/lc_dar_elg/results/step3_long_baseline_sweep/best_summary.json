@@ -1,0 +1,28 @@
+{
+  "best_by_dataset": {
+    "tsp50_uniform": {
+      "run_name": "k50_a2p0",
+      "k": 50,
+      "alpha": 2.0,
+      "gap": 3.8437506013835923
+    },
+    "tsp50_ood": {
+      "run_name": "k20_a2p0",
+      "k": 20,
+      "alpha": 2.0,
+      "gap": 5.818209329641469
+    },
+    "tsp100_uniform": {
+      "run_name": "k10_a2p0",
+      "k": 10,
+      "alpha": 2.0,
+      "gap": 6.804345468727936
+    }
+  },
+  "best_mean": {
+    "run_name": "k20_a2p0",
+    "k": 20,
+    "alpha": 2.0,
+    "mean_gap": 5.5188114215040045
+  }
+}
