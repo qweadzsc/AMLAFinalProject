@@ -125,13 +125,13 @@ def main():
     print("\n" + "=" * 72)
     print("Evaluation Results")
     print("=" * 72)
-    print(f"Average cost:        {results[avg_cost]:.4f}")
+    print(f"Average cost:        {results['avg_cost']:.4f}")
     if "avg_optimal_cost" in results:
-        print(f"Average optimal:     {results[avg_optimal_cost]:.4f}")
+        print(f"Average optimal:     {results['avg_optimal_cost']:.4f}")
     if "avg_gap" in results:
-        print(f"Average gap:         {results[avg_gap]:.2f}%")
-    print(f"Total time:          {results[total_time]:.2f}s")
-    print(f"Avg time/instance:   {results[avg_time_per_instance]:.4f}s")
+        print(f"Average gap:         {results['avg_gap']:.2f}%")
+    print(f"Total time:          {results['total_time']:.2f}s")
+    print(f"Avg time/instance:   {results['avg_time_per_instance']:.4f}s")
     print("=" * 72)
 
 
