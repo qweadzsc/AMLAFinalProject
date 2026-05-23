@@ -882,71 +882,129 @@ ELG-lite 单独 vs sweep 后最佳均值：
 - TSP100 对组合 DAR 更敏感，当前 ELG-lite 在 TSP100 上已经很强，DAR 几乎没有继续改善空间，alpha 增大时通常会变差。
 - 如果最终报告组合方法，建议使用 `k=20, alpha=0.5` 作为 tuned ELG-lite + DAR；如果强调稳健性，仍应把 ELG-lite 单独作为主结果，并把 DAR 组合作为小幅可调增强。
 
-## Step 8：完成最小消融
+## Step 8：如何讲故事
+
+这一轮不应该把选题叙述成“AI 帮我挑了三篇”或者“找别人推荐了三篇”，而应该从 baseline 暴露出的真实问题自然推出来。
+
+### 8.1 从现象出发
+
+在当前 LC baseline 上，最先观察到的不是单纯的训练不收敛，而是两类更具体的问题：
+
+- **问题 1：训练长度非常敏感。** 短训练下，baseline gap 会非常大，说明“训练不充分”和“方法本身无效”容易混在一起。
+- **问题 2：即使延长训练，跨分布和跨规模泛化仍然明显弱于同分布 TSP50。** 这说明根因不只是 optimization 没做好，还可能是模型本身缺少更稳的归纳偏置。
+
+这两个现象把后续工作自然分成三层：
+
+1. 先看 **reward / optimization 层** 能不能解决问题。
+2. 再看 **attention score / inference 层** 能不能直接抑制泛化时的错误选择。
+3. 最后看 **policy architecture / training 层** 能不能把“可迁移的局部模式”学进去。
+
+### 8.2 为什么先尝试 Leader Reward
+
+最自然的第一个假设是：baseline 之所以泛化差，可能 partly 是因为 REINFORCE 信号太粗，只在整条 tour 完成后给回报，导致局部决策学得不稳定。因此最先尝试 **Leader Reward** 是合理的，因为它改的是训练信号，而不是先去改模型结构。
+
+这一步的价值在于：
+
+- 它先回答“是不是纯训练策略问题”。
+- 工程上能最大化复用原 LC/POMO 骨架。
+- 如果有效，说明后续不一定需要动 attention 本体。
+
+为什么后来放弃它：
+
+- 在更长训练下，Leader Reward 相对长训练 baseline 的增益非常小。
+- 它没有解决“训练足够后仍存在的泛化差距”这个更核心的问题。
+- 从现象上看，Leader Reward 更像是在改 credit assignment，而不是在补足模型面对 OOD / cross-scale 时缺失的几何归纳偏置。
+
+因此可以把它写成一条**必要但被证伪的分支**：我们先排除了“只靠 reward shaping 就能解决问题”这一假设。
+
+### 8.3 为什么转向 DAR
+
+放弃 Leader Reward 后，下一个更直接的问题是：**模型在推理时是不是把注意力分散到了太多候选点上，从而在 OOD 和大规模实例上更容易选错？**
+
+DAR 对应的正是这个问题：
+
+- 它不重新定义 reward。
+- 它不要求先重训整个模型。
+- 它直接在 decoder logits 上加入距离感知 bias，等价于给 attention 一个更强的局部几何先验。
+
+所以 DAR 不是“因为它简单才选”，而是因为它恰好对应了一个更贴近现象的解释：
+
+- **Leader Reward** 处理的是“学得稳不稳”。
+- **DAR** 处理的是“推理时选得集中不集中”。
+
+实验结果也支持这一点：DAR 在 TSP50 uniform / OOD 上能给出可观测变化，说明 attention/logit 层面的干预确实抓住了一部分问题；但它对 TSP100 的收益很有限，说明**纯推理期 patch 不足以完全解决泛化问题**。
+
+### 8.4 为什么再做 ELG
+
+如果 DAR 只能提供有限增益，那么自然会得到下一个判断：
+
+- 问题不只是推理时 bias 不够好；
+- 模型训练出来的 policy 本身，也没有显式学到足够可迁移的局部结构。
+
+这就把问题推到了 **ELG**：它通过 local policy 学习近邻子结构，再和 global policy 组合，正好对应“给模型补一个更稳的局部 inductive bias”。
+
+因此 ELG 的选择也不是随机的，而是从前两步顺着推出来的：
+
+1. Leader Reward 说明“只改 reward 不够”。
+2. DAR 说明“只在 inference 时加几何 bias 也不够”。
+3. 那就需要一个**训练期学局部模式、推理期再与全局分数融合**的方法，于是 ELG 成为自然的下一步。
+
+### 8.5 最终叙事建议
+
+最终报告里，这三篇工作可以按下面的逻辑串起来：
+
+1. **先发现问题**：LC baseline 在训练长度和泛化上都很敏感，尤其是 OOD / TSP100。
+2. **先排查训练信号**：Leader Reward 检验“是不是 reward shaping 就够了”，结论是否定的。
+3. **再排查 attention 推理行为**：DAR 检验“是不是 attention dispersion 导致推理偏差”，结论是部分成立，但收益有限。
+4. **最后补模型归纳偏置**：ELG 检验“是不是需要显式局部 policy 才能学到更可迁移的结构”，结论是它比单纯 DAR 更像一个主线方案。
+
+一句话版本：
+
+> 我们不是先选论文再找理由，而是先在 LC baseline 上定位“reward shaping 不足、推理几何 bias 不足、局部可迁移结构缺失”这三个层次的问题，然后分别对应到 Leader Reward、DAR 和 ELG；其中 Leader Reward 被实验排除，DAR 提供了轻量可验证改进，ELG 则成为最终保留的主线。
+
+## Step 9：接口整理
 
 目标：
 
-- 确认真正带来收益的是哪一部分。
+- 把最终版本整理成符合 `Project/INSTRUCTION.md` 的 LC 提交接口。
+- 补充项目级 README，说明环境配置和全部实验如何复现。
 
-最低要求的消融：
+本次整理后的最终接口目录：
 
-| 实验 | Local Policy | Global Distance Penalty | DAR |
-| --- | --- | --- | --- |
-| A | 关 | 关 | 关 |
-| B | 关 | 关 | 开 |
-| C | 开 | 开 | 关 |
-| D | 开 | 开 | 开 |
-
-Milestone：
-
-```bash
-conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_dar.py --preset ablation
+```text
+Project/final_lc_elg_dar/
+  checkpoints/
+    best_model.pth
+  model/
+    __init__.py
+    lc_model.py
+    tsp_env.py
+    local_policy.py
+    dar_wrapper.py
+  evaluate_lc.py
+  train_lc.py
 ```
+
+接口说明：
+
+- `model/lc_model.py` 导出 `LCModel`，保留与 baseline 一致的 `pre_forward()` / `forward()` 调用方式。
+- `model/tsp_env.py` 导出 `TSPEnv`，接口与 baseline 保持一致。
+- `evaluate_lc.py` 定义了作业要求的全局 `model_params` 和 `env_params`。
+- 默认加载的最终权重是 `ELG-lite + tuned DAR` 版本；如果只想复现 ELG-lite，可在 `model_params` 中把 `dar_enabled` 改成 `0`。
+
+最终默认配置：
+
+| Item | Value |
+| --- | --- |
+| Global policy | LC baseline encoder-decoder |
+| Local policy | ELG-lite (`local_k=10`, `local_score_weight=1.0`) |
+| Global distance penalty | `0.5` |
+| DAR | 开启 |
+| DAR best params | `dar_k=20`, `dar_alpha=0.5`, `dar_log_nearest=1` |
+| Checkpoint source | `Project/experiments/lc_dar_elg/checkpoints/elg_e20_b50_seed20260522/best_model.pth` 转换而来 |
 
 可验证成果：
 
-- `ablation_summary.json`
-- `ablation.md`
-- 至少能判断收益主要来自：
-  - 推理期几何 bias
-  - 训练期局部策略
-  - 或两者组合
-
-## Step 9：决定是否值得作为主线 close 或继续
-
-建议 close / continue 判据：
-
-- 如果 `baseline + DAR` 已经能稳定改善 `tsp50_ood` 和 `tsp100_uniform`，这条路线值得继续。
-- 如果 `ELG-lite` 在同预算下仍然几乎没有提升，则不建议继续深挖完整 ELG 复现。
-- 如果 `ELG-lite + DAR` 的提升显著高于单独 DAR，说明“训练期局部策略 + 推理期几何重塑”的复合点成立，可以作为最终项目主线。
-
-最终可交付的最低版本：
-
-1. 复用 baseline 三验证集结果。
-2. 实现并验证 DAR inference patch。
-3. 做 DAR 超参扫描。
-4. 实现 ELG-lite smoke run。
-5. 给出 baseline / DAR / ELG-lite / ELG-lite+DAR 的对比表。
-
-## 推荐最终表格
-
-| 方法 | TSP-50 Uniform Gap | TSP-50 OOD Gap | TSP-100 Gap | Time |
-| --- | --- | --- | --- | --- |
-| LC baseline | 待填 | 待填 | 待填 | 待填 |
-| LC + DAR | 待填 | 待填 | 待填 | 待填 |
-| LC + ELG-lite | 待填 | 待填 | 待填 | 待填 |
-| LC + ELG-lite + DAR | 待填 | 待填 | 待填 | 待填 |
-
-## 当前结论
-
-和上一次相比，这条路线更值得做：
-
-- DAR 是低风险、强可验证、直接作用于 attention/logit 的方法。
-- ELG 是更重的训练增强，但与 POMO 风格骨架兼容。
-- 两者结合形成了一个合理、可解释、且有官方代码可对照的工作点。
-
-如果后续时间有限，优先级建议是：
-
-1. 先做 DAR。
-2. 再做 ELG-lite。
-3. 最后再做组合与消融。
+- `Project/final_lc_elg_dar/evaluate_lc.py` 可独立运行。
+- `Project/final_lc_elg_dar/model/` 满足作业接口要求。
+- `Project/README.md` 写明环境配置、最终接口位置以及 Step 1 到 Step 7 的复现实验命令。
