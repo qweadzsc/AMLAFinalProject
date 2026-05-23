@@ -832,6 +832,56 @@ CUDA_VISIBLE_DEVICES=5 conda run --no-capture-output -n amla_tsp python -u Proje
 - DAR 仍然是有效的低成本推理增强，尤其对未使用 ELG-lite 训练的 baseline 有明显帮助。
 - 如果继续组合路线，下一步不应直接沿用 `alpha=4.0`，而应对 ELG-lite checkpoint 单独 sweep 更小的 DAR alpha，例如 `0.25/0.5/1.0/2.0`。
 
+### Step 7 补充：ELG-lite checkpoint 上的 DAR 超参 sweep（已完成）
+
+因为 `alpha=4.0` 的组合结果略差于 ELG-lite 单独结果，本次额外在 ELG-lite checkpoint 上单独做了 DAR 超参数实验，验证“加入 DAR 是否稳定弱化结果”。
+
+本次实际执行命令：
+
+```bash
+CUDA_VISIBLE_DEVICES=5 conda run --no-capture-output -n amla_tsp python -u Project/experiments/lc_dar_elg/sweep_elg_dar.py \
+  --checkpoint Project/experiments/lc_dar_elg/checkpoints/elg_e20_b50_seed20260522/best_model.pth \
+  --device cuda:0 \
+  --sweep-k 5,10,20 \
+  --sweep-alpha 0.05,0.1,0.25,0.5,1.0,2.0,4.0 \
+  --results-dir Project/experiments/lc_dar_elg/results/step7_elg_dar_sweep_e20_b50_seed20260522
+```
+
+搜索空间：
+
+- `dar_k`: 5, 10, 20
+- `dar_alpha`: 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0
+- `dar_log_nearest`: 1
+
+ELG-lite 单独 vs sweep 后最佳均值：
+
+| Setting | TSP50 Uniform Gap | TSP50 OOD Gap | TSP100 Gap | Mean Gap |
+| --- | ---: | ---: | ---: | ---: |
+| ELG-lite | 3.10% | 3.70% | 6.61% | 4.47% |
+| ELG-lite + DAR best mean (`k=20, alpha=0.5`) | 3.01% | 3.51% | 6.67% | 4.40% |
+
+各数据集最优：
+
+| Dataset | Best run | K | Alpha | Best gap | Delta vs ELG-lite |
+| --- | --- | ---: | ---: | ---: | ---: |
+| tsp50_uniform | `k10_a0p5` | 10 | 0.50 | 3.01% | -0.09% |
+| tsp50_ood | `k20_a0p5` | 20 | 0.50 | 3.51% | -0.19% |
+| tsp100_uniform | `k5_a0p05` | 5 | 0.05 | 6.61% | 0.00% |
+
+保存产物：
+
+- Sweep 全量结果：`Project/experiments/lc_dar_elg/results/step7_elg_dar_sweep_e20_b50_seed20260522/`
+- Sweep 表格：`Project/experiments/lc_dar_elg/results/step7_elg_dar_sweep_e20_b50_seed20260522/comparison.md`
+- Sweep 最优摘要：`Project/experiments/lc_dar_elg/results/step7_elg_dar_sweep_e20_b50_seed20260522/best_summary.json`
+- 结论摘要：`Project/experiments/lc_dar_elg/results/step7_elg_dar_sweep_conclusion.md`
+
+更新结论：
+
+- “加入 DAR 稳定弱化结果”不成立。`alpha=4.0` 确实偏强，会让 ELG-lite + DAR 略差；但调小 alpha 后，组合可以在 TSP50 uniform/OOD 和 mean gap 上轻微优于 ELG-lite。
+- 提升幅度很小：最佳均值只从 4.47% 降到 4.40%，不是强叠加收益。
+- TSP100 对组合 DAR 更敏感，当前 ELG-lite 在 TSP100 上已经很强，DAR 几乎没有继续改善空间，alpha 增大时通常会变差。
+- 如果最终报告组合方法，建议使用 `k=20, alpha=0.5` 作为 tuned ELG-lite + DAR；如果强调稳健性，仍应把 ELG-lite 单独作为主结果，并把 DAR 组合作为小幅可调增强。
+
 ## Step 8：完成最小消融
 
 目标：
