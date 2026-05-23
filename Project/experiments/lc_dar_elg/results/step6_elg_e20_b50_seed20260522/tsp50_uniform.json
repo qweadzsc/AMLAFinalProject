@@ -1,0 +1,15 @@
+{
+  "num_instances": 128,
+  "avg_cost": 5.846672341227531,
+  "std_cost": 0.25464704448530084,
+  "total_time": 12.239651679992676,
+  "avg_time_per_instance": 0.09562227874994278,
+  "local_k": 10,
+  "local_score_weight": 1.0,
+  "global_distance_penalty": 0.5,
+  "distance_k": 10,
+  "avg_optimal_cost": 5.670871857207975,
+  "std_optimal_cost": 0.23738528816275256,
+  "avg_gap": 3.1030227849156216,
+  "std_gap": 1.4921155620820432
+}

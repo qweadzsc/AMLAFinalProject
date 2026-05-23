@@ -1,0 +1,47 @@
+{
+  "tsp50_uniform": {
+    "num_instances": 128,
+    "avg_cost": 5.846672341227531,
+    "std_cost": 0.25464704448530084,
+    "total_time": 12.239651679992676,
+    "avg_time_per_instance": 0.09562227874994278,
+    "local_k": 10,
+    "local_score_weight": 1.0,
+    "global_distance_penalty": 0.5,
+    "distance_k": 10,
+    "avg_optimal_cost": 5.670871857207975,
+    "std_optimal_cost": 0.23738528816275256,
+    "avg_gap": 3.1030227849156216,
+    "std_gap": 1.4921155620820432
+  },
+  "tsp50_ood": {
+    "num_instances": 16,
+    "avg_cost": 5.010482966899872,
+    "std_cost": 0.37626722523624007,
+    "total_time": 1.9987881183624268,
+    "avg_time_per_instance": 0.12492425739765167,
+    "local_k": 10,
+    "local_score_weight": 1.0,
+    "global_distance_penalty": 0.5,
+    "distance_k": 10,
+    "avg_optimal_cost": 4.834320397264452,
+    "std_optimal_cost": 0.38496067002380496,
+    "avg_gap": 3.6972195237926306,
+    "std_gap": 1.8762860677481765
+  },
+  "tsp100_uniform": {
+    "num_instances": 16,
+    "avg_cost": 8.335552006959915,
+    "std_cost": 0.23823831976676674,
+    "total_time": 3.531629800796509,
+    "avg_time_per_instance": 0.2207268625497818,
+    "local_k": 10,
+    "local_score_weight": 1.0,
+    "global_distance_penalty": 0.5,
+    "distance_k": 10,
+    "avg_optimal_cost": 7.819554002480215,
+    "std_optimal_cost": 0.22257522891424583,
+    "avg_gap": 6.611502396099482,
+    "std_gap": 1.659190801132118
+  }
+}

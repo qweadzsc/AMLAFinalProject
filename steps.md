@@ -616,7 +616,7 @@ Training completed. Best validation cost: 6.7229
 - 训练和验证阶段都已加入更明显的 `print` / `tqdm`，后续长时间运行时不会再长时间静默。
 - 下一步可以进入 Step 6，用一致预算训练一个 ELG-lite 版本，并和 baseline / DAR 做对比。
 
-## Step 6：做 ELG-lite 与 baseline 的同预算对比
+## Step 6：做 ELG-lite 与 baseline 的同预算对比（已完成）
 
 目标：
 
@@ -651,6 +651,88 @@ CUDA_VISIBLE_DEVICES=5 conda run -n amla_tsp \
 - 训练曲线和 checkpoint 正常保存
 - 三验证集评测结果写入 `results/elg_e20_b50/`
 - 形成 baseline vs ELG-lite 表格
+
+本次新增内容：
+
+- `Project/experiments/lc_dar_elg/evaluate_lc_elg.py`
+- `Project/experiments/lc_dar_elg/eval_all_lc_elg.py`
+- `Project/experiments/lc_dar_elg/results/step6_comparison.md`
+- `Project/experiments/lc_dar_elg/results/step6_comparison.json`
+
+本次实际执行命令：
+
+```bash
+CUDA_VISIBLE_DEVICES=5 conda run --no-capture-output -n amla_tsp python -u Project/experiments/lc_dar_elg/train_lc_elg.py \
+  --run-name elg_e20_b50_seed20260522 \
+  --epochs 20 \
+  --batches-per-epoch 50 \
+  --batch-size 64 \
+  --val-interval 5 \
+  --seed 20260522 \
+  --local-k 10 \
+  --local-policy-dim 128 \
+  --local-score-weight 1.0 \
+  --global-distance-penalty 0.5 \
+  --joint-train 1 \
+  --pretrain-global-epochs 0 \
+  --device cuda:0
+
+CUDA_VISIBLE_DEVICES=5 conda run --no-capture-output -n amla_tsp python -u Project/experiments/lc_dar_elg/eval_all_lc_dar.py \
+  --checkpoint Project/experiments/lc_leader/checkpoints/long_baseline_e80_b50_seed20260522_gpu5/model_epoch_20_cost_6.1356.pth \
+  --device cuda:0 \
+  --dar-enabled 0 \
+  --dar-k 10 \
+  --dar-alpha 4.0 \
+  --results-dir Project/experiments/lc_dar_elg/results/step6_baseline_e20_b50_seed20260522
+
+CUDA_VISIBLE_DEVICES=5 conda run --no-capture-output -n amla_tsp python -u Project/experiments/lc_dar_elg/eval_all_lc_elg.py \
+  --checkpoint Project/experiments/lc_dar_elg/checkpoints/elg_e20_b50_seed20260522/best_model.pth \
+  --device cuda:0 \
+  --results-dir Project/experiments/lc_dar_elg/results/step6_elg_e20_b50_seed20260522
+```
+
+训练环境确认：
+
+- 使用 `CUDA_VISIBLE_DEVICES=5`，脚本内打印 `Torch CUDA devices: 1`。
+- 设备名为 `NVIDIA A800-SXM4-80GB`，训练和评估均使用 `cuda:0`。
+- 使用 `--no-capture-output` 和 `python -u` 后，训练、验证、评估阶段均有实时 `print` / `tqdm` 输出。
+
+训练曲线摘要：
+
+| Epoch | Train length | Loss | Val cost |
+| ---: | ---: | ---: | ---: |
+| 1 | 9.2346 | -3.4546 | - |
+| 5 | 6.7064 | -1.0319 | 5.9456 |
+| 10 | 6.4687 | -0.6818 | 5.8841 |
+| 15 | 6.3636 | -0.5426 | 5.8603 |
+| 20 | 6.3093 | -0.4641 | 5.8467 |
+
+同预算三验证集结果：
+
+| Dataset | Baseline cost | ELG-lite cost | Cost delta | Baseline gap | ELG-lite gap | Gap delta |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| tsp50_uniform | 6.1356 | 5.8467 | -0.2889 | 8.23% | 3.10% | -5.13% |
+| tsp50_ood | 5.4034 | 5.0105 | -0.3929 | 11.93% | 3.70% | -8.23% |
+| tsp100_uniform | 9.1021 | 8.3356 | -0.7666 | 16.38% | 6.61% | -9.77% |
+
+保存产物：
+
+- Baseline 对照结果：`Project/experiments/lc_dar_elg/results/step6_baseline_e20_b50_seed20260522/`
+- ELG-lite 结果：`Project/experiments/lc_dar_elg/results/step6_elg_e20_b50_seed20260522/`
+- 对比汇总：`Project/experiments/lc_dar_elg/results/step6_comparison.md`
+- ELG-lite checkpoint：`Project/experiments/lc_dar_elg/checkpoints/elg_e20_b50_seed20260522/best_model.pth`
+
+可验证成果对应结果：
+
+- **训练曲线和 checkpoint 正常保存**：已完成，`history.json`、`config.json`、`best_model.pth` 和 epoch 5/10/15/20 checkpoint 均保存到 `Project/experiments/lc_dar_elg/checkpoints/elg_e20_b50_seed20260522/`。
+- **三验证集评测结果写入结果目录**：已完成，ELG-lite 结果写入 `Project/experiments/lc_dar_elg/results/step6_elg_e20_b50_seed20260522/`，baseline 同预算对照写入 `Project/experiments/lc_dar_elg/results/step6_baseline_e20_b50_seed20260522/`。
+- **形成 baseline vs ELG-lite 表格**：已完成，表格如上，并额外写入 `step6_comparison.md/json`。
+
+当前结论：
+
+- 在相同 `epochs=20, batches_per_epoch=50, batch_size=64, seed=20260522` 预算下，ELG-lite 明显优于 baseline epoch-20。
+- 提升在 OOD 和 TSP100 上更大，分别降低 gap 8.23 和 9.77 个百分点，符合 ELG 局部策略更偏泛化增强的预期。
+- 代价是评估更慢：ELG-lite 需要额外 local policy 前向，TSP50 uniform 从 baseline 约 2.71s 增加到 12.24s。
 
 ## Step 7：组合 ELG-lite + DAR
 
