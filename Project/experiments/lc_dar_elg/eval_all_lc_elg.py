@@ -29,6 +29,10 @@ def parse_args():
         help="Directory for per-dataset JSON metric files.",
     )
     parser.add_argument("--disable-progress", action="store_true")
+    parser.add_argument("--dar-enabled", type=int, choices=[0, 1], default=0)
+    parser.add_argument("--dar-k", type=int, default=10)
+    parser.add_argument("--dar-alpha", type=float, default=1.0)
+    parser.add_argument("--dar-log-nearest", type=int, choices=[0, 1], default=1)
     return parser.parse_args()
 
 
@@ -41,7 +45,8 @@ def main():
         output_json = args.results_dir / f"{name}.json"
         print(
             f"[eval_all_lc_elg] dataset={name} node_cnt={node_cnt} pomo_size={pomo_size} "
-            f"checkpoint={args.checkpoint}",
+            f"checkpoint={args.checkpoint} dar_enabled={bool(args.dar_enabled)} "
+            f"dar_k={args.dar_k} dar_alpha={args.dar_alpha}",
             flush=True,
         )
         cmd = [
@@ -59,6 +64,14 @@ def main():
             args.device,
             "--output-json",
             str(output_json),
+            "--dar-enabled",
+            str(args.dar_enabled),
+            "--dar-k",
+            str(args.dar_k),
+            "--dar-alpha",
+            str(args.dar_alpha),
+            "--dar-log-nearest",
+            str(args.dar_log_nearest),
         ]
         if args.disable_progress:
             cmd.append("--disable-progress")

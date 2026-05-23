@@ -1,0 +1,82 @@
+{
+  "LC baseline": {
+    "tsp50_uniform": {
+      "avg_cost": 6.135596819221973,
+      "avg_gap": 8.230180421714248,
+      "total_time": 2.712326765060425,
+      "gap_delta_vs_baseline": 0.0
+    },
+    "tsp50_ood": {
+      "avg_cost": 5.40341129899025,
+      "avg_gap": 11.925034585529552,
+      "total_time": 0.5516650676727295,
+      "gap_delta_vs_baseline": 0.0
+    },
+    "tsp100_uniform": {
+      "avg_cost": 9.102136850357056,
+      "avg_gap": 16.37754447334352,
+      "total_time": 0.8021872043609619,
+      "gap_delta_vs_baseline": 0.0
+    }
+  },
+  "LC + DAR": {
+    "tsp50_uniform": {
+      "avg_cost": 5.984788320958614,
+      "avg_gap": 5.526500351522888,
+      "total_time": 5.2104504108428955,
+      "gap_delta_vs_baseline": -2.7036800701913606
+    },
+    "tsp50_ood": {
+      "avg_cost": 5.215952277183533,
+      "avg_gap": 7.933395846748832,
+      "total_time": 1.133927345275879,
+      "gap_delta_vs_baseline": -3.99163873878072
+    },
+    "tsp100_uniform": {
+      "avg_cost": 8.411773443222046,
+      "avg_gap": 7.572008010539966,
+      "total_time": 1.6796302795410156,
+      "gap_delta_vs_baseline": -8.805536462803554
+    }
+  },
+  "LC + ELG-lite": {
+    "tsp50_uniform": {
+      "avg_cost": 5.846672341227531,
+      "avg_gap": 3.1030227849156216,
+      "total_time": 12.239651679992676,
+      "gap_delta_vs_baseline": -5.127157636798627
+    },
+    "tsp50_ood": {
+      "avg_cost": 5.010482966899872,
+      "avg_gap": 3.6972195237926306,
+      "total_time": 1.9987881183624268,
+      "gap_delta_vs_baseline": -8.227815061736921
+    },
+    "tsp100_uniform": {
+      "avg_cost": 8.335552006959915,
+      "avg_gap": 6.611502396099482,
+      "total_time": 3.531629800796509,
+      "gap_delta_vs_baseline": -9.766042077244038
+    }
+  },
+  "LC + ELG-lite + DAR": {
+    "tsp50_uniform": {
+      "avg_cost": 5.8563576862216,
+      "avg_gap": 3.2741878807271396,
+      "total_time": 13.921060800552368,
+      "gap_delta_vs_baseline": -4.955992540987109
+    },
+    "tsp50_ood": {
+      "avg_cost": 5.014886558055878,
+      "avg_gap": 3.778819162012069,
+      "total_time": 2.268359661102295,
+      "gap_delta_vs_baseline": -8.146215423517482
+    },
+    "tsp100_uniform": {
+      "avg_cost": 8.362829595804214,
+      "avg_gap": 6.968490627361305,
+      "total_time": 3.9229485988616943,
+      "gap_delta_vs_baseline": -9.409053845982214
+    }
+  }
+}

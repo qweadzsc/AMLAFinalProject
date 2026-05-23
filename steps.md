@@ -734,7 +734,7 @@ CUDA_VISIBLE_DEVICES=5 conda run --no-capture-output -n amla_tsp python -u Proje
 - 提升在 OOD 和 TSP100 上更大，分别降低 gap 8.23 和 9.77 个百分点，符合 ELG 局部策略更偏泛化增强的预期。
 - 代价是评估更慢：ELG-lite 需要额外 local policy 前向，TSP50 uniform 从 baseline 约 2.71s 增加到 12.24s。
 
-## Step 7：组合 ELG-lite + DAR
+## Step 7：组合 ELG-lite + DAR（已完成）
 
 目标：
 
@@ -749,24 +749,88 @@ CUDA_VISIBLE_DEVICES=5 conda run --no-capture-output -n amla_tsp python -u Proje
   - ELG-lite
   - ELG-lite + DAR
 
+实际实现说明：
+
+- 没有修改原始 baseline，也没有强行让 `evaluate_lc_dar.py` 兼容两种 checkpoint 格式。
+- 新增方式是在 `evaluate_lc_elg.py` 中支持 `--dar-enabled/--dar-k/--dar-alpha/--dar-log-nearest`，先计算 ELG ensemble logits，再对该 logits 叠加 DAR bias。
+- `eval_all_lc_elg.py` 已支持透传 DAR 参数。
+
 Milestone：
 
 ```bash
-conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_dar.py \
-  --checkpoint Project/experiments/lc_dar_elg/checkpoints/elg_e20_b50/best_model.pth \
+CUDA_VISIBLE_DEVICES=5 conda run --no-capture-output -n amla_tsp python -u Project/experiments/lc_dar_elg/eval_all_lc_elg.py \
+  --checkpoint Project/experiments/lc_dar_elg/checkpoints/elg_e20_b50_seed20260522/best_model.pth \
   --device cuda:0 \
   --dar-enabled 1 \
   --dar-k 10 \
-  --dar-alpha 1.0
+  --dar-alpha 4.0 \
+  --results-dir Project/experiments/lc_dar_elg/results/step7_elg_dar_e20_b50_seed20260522_k10_a4
 ```
 
-可验证成果：
+本次新增/修改内容：
 
-- 生成四组对比表
-- 能回答：
-  - DAR 单独是否有效？
-  - ELG-lite 单独是否有效？
-  - 组合后是否叠加收益，还是互相抵消？
+- `Project/experiments/lc_dar_elg/evaluate_lc_elg.py`：支持 ELG-lite + DAR 组合推理。
+- `Project/experiments/lc_dar_elg/eval_all_lc_elg.py`：支持批量传入 DAR 参数。
+- `Project/experiments/lc_dar_elg/results/step7_four_way_comparison.md`
+- `Project/experiments/lc_dar_elg/results/step7_four_way_comparison.json`
+
+本次实际执行命令：
+
+```bash
+CUDA_VISIBLE_DEVICES=5 conda run --no-capture-output -n amla_tsp python -u Project/experiments/lc_dar_elg/eval_all_lc_dar.py \
+  --checkpoint Project/experiments/lc_leader/checkpoints/long_baseline_e80_b50_seed20260522_gpu5/model_epoch_20_cost_6.1356.pth \
+  --device cuda:0 \
+  --dar-enabled 1 \
+  --dar-k 10 \
+  --dar-alpha 4.0 \
+  --results-dir Project/experiments/lc_dar_elg/results/step7_baseline_dar_e20_b50_seed20260522_k10_a4
+
+CUDA_VISIBLE_DEVICES=5 conda run --no-capture-output -n amla_tsp python -u Project/experiments/lc_dar_elg/eval_all_lc_elg.py \
+  --checkpoint Project/experiments/lc_dar_elg/checkpoints/elg_e20_b50_seed20260522/best_model.pth \
+  --device cuda:0 \
+  --dar-enabled 1 \
+  --dar-k 10 \
+  --dar-alpha 4.0 \
+  --results-dir Project/experiments/lc_dar_elg/results/step7_elg_dar_e20_b50_seed20260522_k10_a4
+```
+
+四组对比结果：
+
+| 方法 | TSP50 Uniform Gap | TSP50 OOD Gap | TSP100 Gap | Total time |
+| --- | ---: | ---: | ---: | ---: |
+| LC baseline | 8.23% | 11.93% | 16.38% | 4.06s |
+| LC + DAR | 5.53% | 7.93% | 7.57% | 8.02s |
+| LC + ELG-lite | 3.10% | 3.70% | 6.61% | 17.77s |
+| LC + ELG-lite + DAR | 3.27% | 3.78% | 6.97% | 20.11s |
+
+相对 baseline 的 gap 变化：
+
+| 方法 | TSP50 Uniform delta | TSP50 OOD delta | TSP100 delta |
+| --- | ---: | ---: | ---: |
+| LC baseline | 0.00% | 0.00% | 0.00% |
+| LC + DAR | -2.70% | -3.99% | -8.81% |
+| LC + ELG-lite | -5.13% | -8.23% | -9.77% |
+| LC + ELG-lite + DAR | -4.96% | -8.14% | -9.41% |
+
+保存产物：
+
+- Baseline + DAR 结果：`Project/experiments/lc_dar_elg/results/step7_baseline_dar_e20_b50_seed20260522_k10_a4/`
+- ELG-lite + DAR 结果：`Project/experiments/lc_dar_elg/results/step7_elg_dar_e20_b50_seed20260522_k10_a4/`
+- 四组汇总：`Project/experiments/lc_dar_elg/results/step7_four_way_comparison.md`
+- 四组 JSON：`Project/experiments/lc_dar_elg/results/step7_four_way_comparison.json`
+
+可验证成果对应结果：
+
+- **生成四组对比表**：已完成，表格如上，详细结果写入 `step7_four_way_comparison.md/json`。
+- **DAR 单独是否有效**：有效。相比 baseline，三组 gap 均下降，TSP100 从 16.38% 降到 7.57%。
+- **ELG-lite 单独是否有效**：有效，而且在这组同预算实验中强于 DAR 单独，三组 gap 分别降到 3.10%、3.70%、6.61%。
+- **组合后是否叠加收益，还是互相抵消**：没有叠加收益。`ELG-lite + DAR` 三组结果都略差于 `ELG-lite` 单独，说明当前 DAR 参数和 ELG-lite 已学到的局部/距离偏置存在轻微重复或过强约束。
+
+当前结论：
+
+- 本项目主线应优先报告 `LC + ELG-lite`，而不是默认报告 `ELG-lite + DAR`。
+- DAR 仍然是有效的低成本推理增强，尤其对未使用 ELG-lite 训练的 baseline 有明显帮助。
+- 如果继续组合路线，下一步不应直接沿用 `alpha=4.0`，而应对 ELG-lite checkpoint 单独 sweep 更小的 DAR alpha，例如 `0.25/0.5/1.0/2.0`。
 
 ## Step 8：完成最小消融
 

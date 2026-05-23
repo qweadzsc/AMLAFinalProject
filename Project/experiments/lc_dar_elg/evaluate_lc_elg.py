@@ -23,7 +23,7 @@ sys.path.insert(0, str(LOCAL_MODEL_DIR))
 from model import LCModel, TSPEnv  # noqa: E402
 from local_policy import LocalPolicyScorer  # noqa: E402
 from train_lc_elg import compute_ensemble_logits, prepare_first_step  # noqa: E402
-from dar_wrapper import logits_to_probs  # noqa: E402
+from dar_wrapper import apply_dar_to_logits, logits_to_probs  # noqa: E402
 
 
 def parse_args():
@@ -35,6 +35,10 @@ def parse_args():
     parser.add_argument("--device", default="cuda:0" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--output-json", type=Path, default=None)
     parser.add_argument("--disable-progress", action="store_true")
+    parser.add_argument("--dar-enabled", type=int, choices=[0, 1], default=0)
+    parser.add_argument("--dar-k", type=int, default=10)
+    parser.add_argument("--dar-alpha", type=float, default=1.0)
+    parser.add_argument("--dar-log-nearest", type=int, choices=[0, 1], default=1)
     return parser.parse_args()
 
 
@@ -53,6 +57,10 @@ def make_eval_args(checkpoint: dict, cli_args) -> Namespace:
             "pomo_size": cli_args.pomo_size,
             "batch_size": 1,
             "disable_progress": cli_args.disable_progress,
+            "dar_enabled": bool(cli_args.dar_enabled),
+            "dar_k": cli_args.dar_k,
+            "dar_alpha": cli_args.dar_alpha,
+            "dar_log_nearest": cli_args.dar_log_nearest,
         }
     )
     return Namespace(**saved_args)
@@ -81,6 +89,16 @@ def rollout(model, local_policy, env, eval_args):
             selected, _ = prepare_first_step(model, state, reset_state.coordinates)
         else:
             logits, _ = compute_ensemble_logits(model, local_policy, env, state, eval_args, epoch_idx=10**9)
+            if eval_args.dar_enabled:
+                logits = apply_dar_to_logits(
+                    logits=logits,
+                    coordinates=env.coordinates,
+                    current_node=state.current_node,
+                    ninf_mask=state.ninf_mask,
+                    dar_k=eval_args.dar_k,
+                    dar_alpha=eval_args.dar_alpha,
+                    dar_log_nearest=bool(eval_args.dar_log_nearest),
+                )
             selected = logits_to_probs(logits).argmax(dim=2)
         state, reward, done = env.step(selected)
     return reward
@@ -125,6 +143,10 @@ def evaluate(model, local_policy, env, solver, cli_args, eval_args):
         "local_score_weight": float(eval_args.local_score_weight),
         "global_distance_penalty": float(eval_args.global_distance_penalty),
         "distance_k": int(eval_args.distance_k or eval_args.local_k),
+        "dar_enabled": bool(eval_args.dar_enabled),
+        "dar_k": int(eval_args.dar_k),
+        "dar_alpha": float(eval_args.dar_alpha),
+        "dar_log_nearest": bool(eval_args.dar_log_nearest),
     }
     if ref_costs:
         results.update(
@@ -150,6 +172,10 @@ def print_results(args, results):
     print(f"Local K:             {results['local_k']}")
     print(f"Local weight:        {results['local_score_weight']}")
     print(f"Distance penalty:    {results['global_distance_penalty']}")
+    print(f"DAR enabled:         {results['dar_enabled']}")
+    print(f"DAR k:               {results['dar_k']}")
+    print(f"DAR alpha:           {results['dar_alpha']}")
+    print(f"DAR log nearest:     {results['dar_log_nearest']}")
     print(f"Average cost:        {results['avg_cost']:.4f}")
     if "avg_optimal_cost" in results:
         print(f"Average optimal:     {results['avg_optimal_cost']:.4f}")
