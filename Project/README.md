@@ -14,12 +14,6 @@ pip install --no-index torch-scatter -f https://pytorch-geometric.com/whl/torch-
 pip install --no-index torch-sparse -f https://pytorch-geometric.com/whl/torch-2.1.0+cu121.html
 ```
 
-如果机器上有多张卡，本文所有训练默认按单卡运行，建议显式指定：
-
-```bash
-CUDA_VISIBLE_DEVICES=5
-```
-
 ## 2. 最终提交接口
 
 最终接口目录：`Project/final_lc_elg_dar/`
@@ -112,9 +106,3 @@ conda run -n amla_tsp python Project/experiments/lc_dar_elg/eval_all_lc_elg.py  
 ```bash
 CUDA_VISIBLE_DEVICES=5 conda run --no-capture-output -n amla_tsp python -u Project/experiments/lc_dar_elg/sweep_elg_dar.py   --checkpoint Project/experiments/lc_dar_elg/checkpoints/elg_e20_b50_seed20260522/best_model.pth   --device cuda:0   --sweep-k 5,10,20   --sweep-alpha 0.05,0.1,0.25,0.5,1.0,2.0,4.0   --results-dir Project/experiments/lc_dar_elg/results/step7_elg_dar_sweep_e20_b50_seed20260522
 ```
-
-## 5. 推荐阅读顺序
-
-- `steps.md`：完整实验过程、里程碑与结论。
-- `steps-leader-reward.md`：Leader Reward 路线失败总结。
-- `Project/final_lc_elg_dar/`：最终提交接口。
