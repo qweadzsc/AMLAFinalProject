@@ -22,3 +22,9 @@ env/
 
 # ELG-lite checkpoints
 Project/experiments/lc_dar_elg/checkpoints/
+
+# Submission cleanup
+/*.md
+.vscode/
+Project/experiments/
+Project/final_lc_elg_dar/

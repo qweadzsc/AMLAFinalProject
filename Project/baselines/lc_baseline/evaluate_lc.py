@@ -148,3 +148,7 @@ def main():
     print(f"Total time:          {results['total_time']:.2f}s")
     print(f"Avg time/instance:   {results['avg_time_per_instance']:.4f}s")
     print("=" * 72)
+
+
+if __name__ == "__main__":
+    main()
